@@ -59,12 +59,12 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v4.4 Pipeline Imune a Acentos e Cedilhas</p>
+    <p class="portal-subtitle">Painel Administrativo | v4.5 Sincronização Direta de Keys</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# INICIALIZAÇÃO DE VARIÁVEIS DE MEMÓRIA
+# INICIALIZAÇÃO DE VARIÁVEIS DE MEMÓRIA (CHAVES BLINDADAS)
 # ==========================================
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = pd.DataFrame()
@@ -75,12 +75,14 @@ else:
         st.session_state.carrinho['quantidade'] = 1.0
 
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
-if 'p1_busca' not in st.session_state: st.session_state['p1_busca'] = ""
-if 'p2_busca' not in st.session_state: st.session_state['p2_busca'] = ""
-if 'p3_busca' not in st.session_state: st.session_state['p3_busca'] = ""
-if 'input_nome_relatorio' not in st.session_state: st.session_state['input_nome_relatorio'] = "ITEM DA COTAÇÃO"
-if 'input_qtd_relatorio' not in st.session_state: st.session_state['input_qtd_relatorio'] = 1.0
-if 'input_qtd_internet' not in st.session_state: st.session_state['input_qtd_internet'] = 1.0
+
+# A Injeção Direta: Criação das chaves antes dos formulários existirem
+if 'p1_busca_form' not in st.session_state: st.session_state['p1_busca_form'] = ""
+if 'p2_busca_form' not in st.session_state: st.session_state['p2_busca_form'] = ""
+if 'p3_busca_form' not in st.session_state: st.session_state['p3_busca_form'] = ""
+if 'input_nome_relatorio_form' not in st.session_state: st.session_state['input_nome_relatorio_form'] = "ITEM DA COTAÇÃO"
+if 'input_qtd_relatorio_form' not in st.session_state: st.session_state['input_qtd_relatorio_form'] = 1.0
+if 'input_qtd_internet_form' not in st.session_state: st.session_state['input_qtd_internet_form'] = 1.0
 if 'ultimo_item_selecionado' not in st.session_state: st.session_state['ultimo_item_selecionado'] = ""
 
 def remover_acentos(texto):
@@ -644,6 +646,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
             
+            # --- O HACK DA SINCRONIZAÇÃO DIRETA NA MEMÓRIA ---
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
@@ -651,25 +654,26 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     texto_limpo = remover_acentos(item_selecionado).replace('-', ' ').replace(',', ' ').replace('.', ' ')
                     palavras = [p for p in texto_limpo.split() if p not in stopwords and len(p) > 1]
                     
-                    st.session_state['p1_busca'] = palavras[0] if len(palavras) > 0 else ""
-                    st.session_state['p2_busca'] = palavras[1] if len(palavras) > 1 else ""
-                    st.session_state['p3_busca'] = ""
+                    # Injeção DIRETA na Key da caixa de texto
+                    st.session_state['p1_busca_form'] = palavras[0] if len(palavras) > 0 else ""
+                    st.session_state['p2_busca_form'] = palavras[1] if len(palavras) > 1 else ""
+                    st.session_state['p3_busca_form'] = ""
                     
-                    st.session_state['input_nome_relatorio'] = item_selecionado
+                    st.session_state['input_nome_relatorio_form'] = item_selecionado
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
-                    st.session_state['input_qtd_relatorio'] = qtd_extraida
-                    st.session_state['input_qtd_internet'] = qtd_extraida
+                    st.session_state['input_qtd_relatorio_form'] = qtd_extraida
+                    st.session_state['input_qtd_internet_form'] = qtd_extraida
                 else:
-                    st.session_state['p1_busca'] = ""
-                    st.session_state['p2_busca'] = ""
-                    st.session_state['p3_busca'] = ""
-                    st.session_state['input_nome_relatorio'] = "ITEM DA COTAÇÃO"
-                    st.session_state['input_qtd_relatorio'] = 1.0
-                    st.session_state['input_qtd_internet'] = 1.0
-                st.rerun()
-
+                    st.session_state['p1_busca_form'] = ""
+                    st.session_state['p2_busca_form'] = ""
+                    st.session_state['p3_busca_form'] = ""
+                    st.session_state['input_nome_relatorio_form'] = "ITEM DA COTAÇÃO"
+                    st.session_state['input_qtd_relatorio_form'] = 1.0
+                    st.session_state['input_qtd_internet_form'] = 1.0
+                st.rerun() # Força a tela a piscar e puxar os dados injetados
+                
             if item_selecionado:
-                st.success(f"✔️ Item: **{item_selecionado}** | 📦 Quantidade Total: **{st.session_state['input_qtd_relatorio']}**")
+                st.success(f"✔️ Item: **{item_selecionado}** | 📦 Quantidade Total: **{st.session_state['input_qtd_relatorio_form']}**")
     
     conn.close()
     st.divider()
@@ -679,9 +683,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
         
-        p1 = c1.text_input("Palavra Principal", value=st.session_state['p1_busca'], key="p1_busca_form")
-        p2 = c2.text_input("Contendo também (1)", value=st.session_state['p2_busca'], key="p2_busca_form")
-        p3 = c3.text_input("Contendo também (2)", value=st.session_state['p3_busca'], key="p3_busca_form")
+        # Caixas cegas: Elas não têm o parâmetro 'value', elas obedecem unicamente à 'key' injetada acima
+        p1 = c1.text_input("Palavra Principal", key="p1_busca_form")
+        p2 = c2.text_input("Contendo também (1)", key="p2_busca_form")
+        p3 = c3.text_input("Contendo também (2)", key="p3_busca_form")
         p_excluir = c4.text_input("🚫 NÃO pode conter", key="pex_busca")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
@@ -699,7 +704,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (A CURA DO BUG DO AÇÚCAR)
+    # VAREJADOR IA (BLINDADO CONTRA ACENTOS DO GOVERNO)
     # ==========================================
     def acionar_varejador(termo_busca, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
@@ -707,7 +712,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             df_varejador = pd.DataFrame()
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json, text/plain, */*', 'Accept-Language': 'pt-BR,pt;q=0.9'}
             
-            # Puxa os termos e remove vazios
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
             palavras = [p for p in remover_acentos(termo_busca).split() if p not in stopwords]
             if not palavras: return
@@ -833,8 +837,8 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         )
         
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", value=st.session_state['input_nome_relatorio'], key="input_nome_relatorio_form")
-        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['input_qtd_relatorio']), step=1.0, key="input_qtd_relatorio_form")
+        nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", key="input_nome_relatorio_form")
+        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="input_qtd_relatorio_form")
         
         if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True, key="btn_add_carrinho"):
             selecionados = df_editado[df_editado['Selecionar'] == True].copy()
@@ -854,7 +858,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1])
         desc_int = c_int1.text_input("Descrição")
         unid_int = c_int2.text_input("Unidade")
-        qtd_int = c_int5.number_input("Quantidade", value=float(st.session_state['input_qtd_internet']), step=1.0, key="input_qtd_internet_form") 
+        qtd_int = c_int5.number_input("Quantidade", step=1.0, key="input_qtd_internet_form") 
         
         c_int3, c_int4 = st.columns([2, 1])
         forn_int = c_int3.text_input("Loja e CNPJ")
