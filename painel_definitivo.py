@@ -5,6 +5,7 @@ import unicodedata
 import time
 import os
 import sys
+import urllib.parse
 from datetime import datetime
 from io import BytesIO
 
@@ -71,7 +72,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | Controle de Cotações e Planejamento | v2.2 Varejador Adaptativo</p>
+    <p class="portal-subtitle">Painel Administrativo | Controle de Cotações e Planejamento | v2.3 Varejador Camuflado</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -655,14 +656,18 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     with st.spinner("🌐 Acionando o Varejador Nacional... Buscando preços em outros estados do Brasil para completar o mapa!"):
                         time.sleep(1.5) 
                         termo_varejo = remover_acentos(p1) if p1 else "ITEM"
-                        # O FILTRO DO ESPAÇO PARA A API (A SOLUÇÃO DO VAREJADOR)
-                        termo_varejo_url = termo_varejo.replace(" ", "+")
+                        # O DISFARCE DO VAREJADOR: Codificação oficial e Cabecalho Chrome
+                        termo_varejo_url = urllib.parse.quote(termo_varejo)
+                        headers = {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'application/json, text/plain, */*',
+                            'Accept-Language': 'pt-BR,pt;q=0.9'
+                        }
                         
                         df_varejador = pd.DataFrame()
                         try:
                             url_api = f"https://pncp.gov.br/api/search/?q={termo_varejo_url}&tipos_documento=item"
-                            headers = {'User-Agent': 'Mozilla/5.0'}
-                            resposta = requests.get(url_api, headers=headers, timeout=8)
+                            resposta = requests.get(url_api, headers=headers, timeout=15)
                             if resposta.status_code == 200:
                                 dados = resposta.json()
                                 itens_api = dados.get('items', [])
@@ -713,14 +718,18 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 with st.spinner("🌐 Acionando o Varejador Nacional... Buscando preços em outros estados do Brasil!"):
                     time.sleep(1.5)
                     termo_varejo = remover_acentos(p1) if p1 else "ITEM"
-                    # O FILTRO DO ESPAÇO PARA A API (A SOLUÇÃO DO VAREJADOR)
-                    termo_varejo_url = termo_varejo.replace(" ", "+")
+                    # O DISFARCE DO VAREJADOR: Codificação oficial e Cabecalho Chrome
+                    termo_varejo_url = urllib.parse.quote(termo_varejo)
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'application/json, text/plain, */*',
+                        'Accept-Language': 'pt-BR,pt;q=0.9'
+                    }
                     
                     df_varejador = pd.DataFrame()
                     try:
                         url_api = f"https://pncp.gov.br/api/search/?q={termo_varejo_url}&tipos_documento=item"
-                        headers = {'User-Agent': 'Mozilla/5.0'}
-                        resposta = requests.get(url_api, headers=headers, timeout=8)
+                        resposta = requests.get(url_api, headers=headers, timeout=15)
                         if resposta.status_code == 200:
                             dados = resposta.json()
                             itens_api = dados.get('items', [])
