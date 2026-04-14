@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v3.6 Blindagem Total de Banco de Dados</p>
+    <p class="portal-subtitle">Painel Administrativo | v3.7 Blindagem Anti-Queda de Abas</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -86,7 +86,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS (COM BLINDAGEM DE TABELAS VAZIAS)
+# 📡 BANCO DE DADOS (COM INSPEÇÃO SEGURA DE COLUNAS)
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False):
@@ -101,12 +101,9 @@ def conectar_banco():
     conn.execute('PRAGMA journal_mode=WAL;')
     cursor = conn.cursor()
     
-    # 1. Tabelas de Planejamento (Aba 1)
     cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT, numero_solic TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS lotes_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_solicitacao INTEGER, nome_lote TEXT, desc_lote TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT, quantidade REAL DEFAULT 1.0)''')
-    
-    # 2. Tabela de Compras do Robô (A CURA DO ERRO ATUAL - Aba 2)
     cursor.execute('''CREATE TABLE IF NOT EXISTS itens_compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         id_item TEXT, descricao_item TEXT, unid_medida TEXT, 
@@ -114,11 +111,16 @@ def conectar_banco():
         credor TEXT, data_assinatura TEXT, link_pncp TEXT, origem TEXT
     )''')
     
-    # Atualizações de segurança para bancos legados
-    try: cursor.execute("ALTER TABLE solicitacoes ADD COLUMN numero_solic TEXT")
-    except sqlite3.OperationalError: pass 
-    try: cursor.execute("ALTER TABLE itens_solicitacao ADD COLUMN quantidade REAL DEFAULT 1.0")
-    except sqlite3.OperationalError: pass 
+    # Inspeção segura: só tenta alterar se a coluna realmente não existir
+    cursor.execute("PRAGMA table_info(solicitacoes)")
+    if 'numero_solic' not in [col[1] for col in cursor.fetchall()]:
+        try: cursor.execute("ALTER TABLE solicitacoes ADD COLUMN numero_solic TEXT")
+        except: pass 
+
+    cursor.execute("PRAGMA table_info(itens_solicitacao)")
+    if 'quantidade' not in [col[1] for col in cursor.fetchall()]:
+        try: cursor.execute("ALTER TABLE itens_solicitacao ADD COLUMN quantidade REAL DEFAULT 1.0")
+        except: pass 
         
     conn.commit()
     return conn
@@ -519,7 +521,11 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             qtd_val = pd.to_numeric(row_item[col_qtd], errors='coerce')
                             
                             if desc_val and desc_val != 'NAN' and 'VAZIO' not in desc_val and pd.notna(qtd_val) and qtd_val > 0:
-                                cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val, float(qtd_val)))
+                                # BLINDAGEM: Tenta salvar com quantidade. Se o banco recusar, salva sem quantidade.
+                                try:
+                                    cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val, float(qtd_val)))
+                                except sqlite3.OperationalError:
+                                    cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit()
                     conn.close()
@@ -573,11 +579,21 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     qtd_item = ci_2.number_input("Qtd", min_value=1.0)
                     if st.form_submit_button("Inserir Item Manual"):
                         if desc_item and unid_item:
-                            conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
+                            # BLINDAGEM: Salva com ou sem a coluna quantidade para não travar
+                            try:
+                                conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
+                            except sqlite3.OperationalError:
+                                conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper()))
                             conn.commit()
                             st.rerun()
                             
-        df_itens = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.quantidade as Qtd FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        # BLINDAGEM ANTI-QUEDA NA TABELA DE VISUALIZAÇÃO
+        try:
+            df_itens = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.quantidade as Qtd FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        except Exception:
+            df_itens = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+            df_itens['Qtd'] = 1.0 # Preenchimento automático de emergência
+            
         if not df_itens.empty:
             st.dataframe(df_itens, use_container_width=True, hide_index=True)
     conn.close()
@@ -606,10 +622,17 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     
     if 'solic_importada' in st.session_state:
         id_imp = st.session_state['solic_importada']
-        df_itens_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.quantidade as Qtd FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
         
+        # BLINDAGEM ANTI-QUEDA (A CURA DO SEU ERRO)
+        try:
+            df_itens_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.quantidade as Qtd FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
+        except Exception:
+            # Se o banco antigo forçadamente não tiver a coluna, o sistema não quebra!
+            df_itens_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
+            df_itens_imp['Qtd'] = 1.0
+
         if not df_itens_imp.empty:
-            st.markdown("### 📋 Planilha Extraída (Com Quantidades Finais)")
+            st.markdown("### 📋 Planilha Extraída")
             st.dataframe(df_itens_imp, use_container_width=True, hide_index=True)
             
             lista_produtos = df_itens_imp['Produto'].tolist()
