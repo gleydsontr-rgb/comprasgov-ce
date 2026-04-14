@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v3.5 Banco Auto-Atualizável e PDFs Dinâmicos</p>
+    <p class="portal-subtitle">Painel Administrativo | v3.6 Blindagem Total de Banco de Dados</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -86,7 +86,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS (COM VACINA DE AUTO-ATUALIZAÇÃO)
+# 📡 BANCO DE DADOS (COM BLINDAGEM DE TABELAS VAZIAS)
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False):
@@ -101,22 +101,24 @@ def conectar_banco():
     conn.execute('PRAGMA journal_mode=WAL;')
     cursor = conn.cursor()
     
-    # Tabela 1: Solicitações
-    cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT)''')
+    # 1. Tabelas de Planejamento (Aba 1)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT, numero_solic TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS lotes_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_solicitacao INTEGER, nome_lote TEXT, desc_lote TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT, quantidade REAL DEFAULT 1.0)''')
+    
+    # 2. Tabela de Compras do Robô (A CURA DO ERRO ATUAL - Aba 2)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_compras (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id_item TEXT, descricao_item TEXT, unid_medida TEXT, 
+        valor_unitario REAL, municipio TEXT, estado TEXT, 
+        credor TEXT, data_assinatura TEXT, link_pncp TEXT, origem TEXT
+    )''')
+    
+    # Atualizações de segurança para bancos legados
     try: cursor.execute("ALTER TABLE solicitacoes ADD COLUMN numero_solic TEXT")
     except sqlite3.OperationalError: pass 
-        
-    # Tabela 2: Lotes
-    cursor.execute('''CREATE TABLE IF NOT EXISTS lotes_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_solicitacao INTEGER, nome_lote TEXT, desc_lote TEXT)''')
-    
-    # Tabela 3: Itens (A VACINA ESTÁ AQUI)
-    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT)''')
-    
-    # Tenta injetar a coluna 'quantidade' nos bancos velhos que não a possuem
-    try: 
-        cursor.execute("ALTER TABLE itens_solicitacao ADD COLUMN quantidade REAL DEFAULT 1.0")
-    except sqlite3.OperationalError: 
-        pass # Se der erro, é porque a coluna já existe, então segue a vida.
+    try: cursor.execute("ALTER TABLE itens_solicitacao ADD COLUMN quantidade REAL DEFAULT 1.0")
+    except sqlite3.OperationalError: pass 
         
     conn.commit()
     return conn
