@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v4.2 Sincronização Perfeita de Pautas</p>
+    <p class="portal-subtitle">Painel Administrativo | v4.3 Filtro Inteligente e Divisão de Palavras</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -76,6 +76,8 @@ else:
 
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 if 'p1_busca' not in st.session_state: st.session_state['p1_busca'] = ""
+if 'p2_busca' not in st.session_state: st.session_state['p2_busca'] = ""
+if 'p3_busca' not in st.session_state: st.session_state['p3_busca'] = ""
 if 'input_nome_relatorio' not in st.session_state: st.session_state['input_nome_relatorio'] = "ITEM DA COTAÇÃO"
 if 'input_qtd_relatorio' not in st.session_state: st.session_state['input_qtd_relatorio'] = 1.0
 if 'input_qtd_internet' not in st.session_state: st.session_state['input_qtd_internet'] = 1.0
@@ -588,7 +590,11 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             conn.commit()
                             st.rerun()
                             
-        df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        try:
+            df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        except Exception:
+            df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+            
         df_itens = pd.DataFrame()
         if not df_bruto.empty:
             df_itens['Lote'] = df_bruto['Lote']
@@ -620,8 +626,12 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     df_itens_imp = pd.DataFrame()
     if 'solic_importada' in st.session_state:
         id_imp = st.session_state['solic_importada']
-        df_bruto_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
         
+        try:
+            df_bruto_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
+        except Exception:
+            df_bruto_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
+            
         if not df_bruto_imp.empty:
             df_itens_imp['Lote'] = df_bruto_imp['Lote']
             df_itens_imp['Produto'] = df_bruto_imp['Produto']
@@ -634,30 +644,34 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
             
-            # --- O ROTEADOR DE MEMÓRIA (MÁGICA DA SINCRONIZAÇÃO) ---
+            # --- O CÉREBRO DE SEPARAÇÃO INTELIGENTE DE PALAVRAS ---
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
-                    # 1. Filtra a Palavra Principal
-                    stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM', 'TIPO', 'KG', 'UND', 'PCT', 'CX']
-                    palavras = [p for p in remover_acentos(item_selecionado).split() if p not in stopwords]
-                    st.session_state['p1_busca'] = " ".join(palavras[:3]) if palavras else remover_acentos(item_selecionado)[:20]
-                    # 2. Sincroniza o Nome do Relatório
+                    # Filtra e divide a Palavra Principal das outras
+                    stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM', 'TIPO', 'KG', 'UND', 'PCT', 'CX', 'UNID', 'LOTE']
+                    texto_limpo = remover_acentos(item_selecionado).replace('-', ' ').replace(',', ' ').replace('.', ' ')
+                    palavras = [p for p in texto_limpo.split() if p not in stopwords and len(p) > 1]
+                    
+                    st.session_state['p1_busca'] = palavras[0] if len(palavras) > 0 else ""
+                    st.session_state['p2_busca'] = palavras[1] if len(palavras) > 1 else ""
+                    st.session_state['p3_busca'] = ""
+                    
                     st.session_state['input_nome_relatorio'] = item_selecionado
-                    # 3. Sincroniza as Quantidades
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     st.session_state['input_qtd_relatorio'] = qtd_extraida
                     st.session_state['input_qtd_internet'] = qtd_extraida
                 else:
                     st.session_state['p1_busca'] = ""
+                    st.session_state['p2_busca'] = ""
+                    st.session_state['p3_busca'] = ""
                     st.session_state['input_nome_relatorio'] = "ITEM DA COTAÇÃO"
                     st.session_state['input_qtd_relatorio'] = 1.0
                     st.session_state['input_qtd_internet'] = 1.0
-                # Força o reload para exibir os novos dados nas caixinhas
                 st.rerun()
 
             if item_selecionado:
-                st.success(f"✔️ Item: **{item_selecionado}** | 📦 Quantidade Total Solicitada: **{st.session_state['input_qtd_relatorio']}**")
+                st.success(f"✔️ Item: **{item_selecionado}** | 📦 Quantidade Total: **{st.session_state['input_qtd_relatorio']}**")
     
     conn.close()
     st.divider()
@@ -667,7 +681,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
         
-        # As caixas agora obedecem à memória do sistema cegamente
         p1 = c1.text_input("Palavra Principal", key="p1_busca")
         p2 = c2.text_input("Contendo também (1)", key="p2_busca")
         p3 = c3.text_input("Contendo também (2)", key="p3_busca")
@@ -822,7 +835,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 selecionados['produto_mapa'] = remover_acentos(nome_grupo).strip()
                 selecionados['quantidade'] = float(qtd_grupo) 
                 st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados]).drop_duplicates(subset=['id_item'])
-                # Previne que o sistema perca os dados na re-renderização
                 st.session_state['ultimo_item_selecionado'] = ""
                 st.rerun()
             else:
