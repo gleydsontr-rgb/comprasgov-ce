@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v3.4 Código Limpo (Sem Duplicatas)</p>
+    <p class="portal-subtitle">Painel Administrativo | v3.5 Banco Auto-Atualizável e PDFs Dinâmicos</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -86,7 +86,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS
+# 📡 BANCO DE DADOS (COM VACINA DE AUTO-ATUALIZAÇÃO)
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False):
@@ -100,9 +100,24 @@ def conectar_banco():
     conn = sqlite3.connect(caminho_banco, timeout=30.0)
     conn.execute('PRAGMA journal_mode=WAL;')
     cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT, numero_solic TEXT)''')
+    
+    # Tabela 1: Solicitações
+    cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT)''')
+    try: cursor.execute("ALTER TABLE solicitacoes ADD COLUMN numero_solic TEXT")
+    except sqlite3.OperationalError: pass 
+        
+    # Tabela 2: Lotes
     cursor.execute('''CREATE TABLE IF NOT EXISTS lotes_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_solicitacao INTEGER, nome_lote TEXT, desc_lote TEXT)''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT, quantidade REAL)''')
+    
+    # Tabela 3: Itens (A VACINA ESTÁ AQUI)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT)''')
+    
+    # Tenta injetar a coluna 'quantidade' nos bancos velhos que não a possuem
+    try: 
+        cursor.execute("ALTER TABLE itens_solicitacao ADD COLUMN quantidade REAL DEFAULT 1.0")
+    except sqlite3.OperationalError: 
+        pass # Se der erro, é porque a coluna já existe, então segue a vida.
+        
     conn.commit()
     return conn
 
@@ -757,7 +772,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             }
         )
         
-        # O PULO DO GATO FINAL: Enviando a Quantidade para o Carrinho e para o PDF
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
         nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", value=item_para_cotar if item_para_cotar else "ITEM DA COTAÇÃO")
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(qtd_alvo_item), step=1.0)
@@ -767,7 +781,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             selecionados = selecionados.drop(columns=['Selecionar'])
             if not selecionados.empty:
                 selecionados['produto_mapa'] = remover_acentos(nome_grupo).strip()
-                selecionados['quantidade'] = float(qtd_grupo) # Salvando a quantidade real
+                selecionados['quantidade'] = float(qtd_grupo) 
                 st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados]).drop_duplicates(subset=['id_item'])
                 st.rerun()
             else:
