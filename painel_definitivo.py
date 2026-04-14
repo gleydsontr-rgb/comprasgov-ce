@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v3.0 Importador de Pautas e PDFs Dinâmicos</p>
+    <p class="portal-subtitle">Painel Administrativo | v3.1 Importador de Pautas Blindado e PDFs Dinâmicos</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -230,7 +230,6 @@ def gerar_pdf_mapa(df_carrinho, orgao, processo, objeto):
     
     for desc_mapa, df_grupo in grupos:
         unid_comum = df_grupo['unid_medida'].mode()[0] if not df_grupo.empty else "UN"
-        # O PULO DO GATO: Pegando a quantidade real armazenada
         qtd_item = df_grupo['quantidade'].max() if 'quantidade' in df_grupo.columns else 1.0
         
         media_preco = df_grupo['valor_unitario'].mean()
@@ -243,8 +242,7 @@ def gerar_pdf_mapa(df_carrinho, orgao, processo, objeto):
         pdf.cell(100, 6, tratar_texto(desc_limpa), border=1, align='L')
         pdf.cell(25, 6, tratar_texto(unid_comum[:15]), border=1, align='C')
         
-        # Formatando a quantidade (se for inteiro, mostra sem .0)
-        qtd_str = f"{int(qtd_item)}" if qtd_item.is_integer() else f"{qtd_item:.2f}"
+        qtd_str = f"{int(qtd_item)}" if float(qtd_item).is_integer() else f"{qtd_item:.2f}"
         
         pdf.cell(15, 6, qtd_str, border=1, align='C')
         pdf.cell(20, 6, f"{media_preco:,.2f}".replace('.', ','), border=1, align='R')
@@ -263,7 +261,7 @@ def gerar_pdf_mapa(df_carrinho, orgao, processo, objeto):
     for desc_mapa, df_grupo in grupos:
         unid_comum = df_grupo['unid_medida'].mode()[0] if not df_grupo.empty else "UN"
         qtd_item = df_grupo['quantidade'].max() if 'quantidade' in df_grupo.columns else 1.0
-        qtd_str = f"{int(qtd_item)}" if qtd_item.is_integer() else f"{qtd_item:.2f}"
+        qtd_str = f"{int(qtd_item)}" if float(qtd_item).is_integer() else f"{qtd_item:.2f}"
         
         pdf.set_font('Arial', 'B', 8)
         titulo = f"ITEM: {desc_mapa} - UNID. MEDIDA: {unid_comum} - QUANTIDADE TOTAL: {qtd_str}"
@@ -414,20 +412,28 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
         st.success("Tudo zerado! Banco de planejamento limpo.")
         st.rerun()
 
-    # --- NOVO: IMPORTADOR AUTOMÁTICO DE PAUTAS ---
+    # --- NOVO: IMPORTADOR AUTOMÁTICO DE PAUTAS (VERSÃO 3.1 - BLINDADO CONTRA ERROS) ---
     st.markdown("### 📥 Importação Automática de Pautas Consolidadas")
     with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens e as quantidades totais", expanded=False):
         arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta (Ex: PAUTA GÊNEROS ALIMENTÍCIOS.csv)", type=["csv", "xlsx"])
         
         if arquivo_pauta:
             try:
-                # Leitura inteligente
+                # 1. Leitura inteligente com blindagem de caracteres (encoding)
                 if arquivo_pauta.name.endswith('.csv'):
-                    df_pauta = pd.read_csv(arquivo_pauta, sep=None, engine='python', on_bad_lines='skip')
+                    try:
+                        df_pauta = pd.read_csv(arquivo_pauta, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
+                    except Exception:
+                        arquivo_pauta.seek(0)
+                        df_pauta = pd.read_csv(arquivo_pauta, sep=None, engine='python', on_bad_lines='skip', encoding='latin-1')
                 else:
-                    df_pauta = pd.read_excel(arquivo_pauta)
+                    try:
+                        df_pauta = pd.read_excel(arquivo_pauta)
+                    except ImportError:
+                        st.error("⚠️ Falta a biblioteca para ler Excel. No terminal, digite: pip install openpyxl")
+                        st.stop()
                 
-                # Procurar o cabeçalho real (linha que tem a palavra ESPECIFICAÇÃO ou LOTE)
+                # 2. Procurar o cabeçalho real (linha que tem a palavra ESPECIFICAÇÃO ou LOTE)
                 idx_header = None
                 for i, row in df_pauta.iterrows():
                     if row.astype(str).str.contains('ESPECIFICAÇÃO', case=False, na=False).any() or row.astype(str).str.contains('LOTE', case=False, na=False).any():
@@ -438,10 +444,24 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     df_pauta.columns = df_pauta.iloc[idx_header]
                     df_pauta = df_pauta.iloc[idx_header+1:].dropna(how='all')
                 
-                # Tentar limpar nomes de colunas
-                df_pauta.columns = [str(c).strip().upper() for c in df_pauta.columns]
+                # 3. O TRUQUE DE MESTRE: Limpar colunas e remover duplicadas (Que travam o Streamlit)
+                novas_colunas = []
+                for c in df_pauta.columns:
+                    nome_limpo = str(c).strip().upper()
+                    if nome_limpo == 'NAN' or nome_limpo == '':
+                        nome_limpo = 'VAZIO'
+                    
+                    # Se tiver coluna com nome repetido (ex: VAZIO, VAZIO), adiciona um número
+                    base = nome_limpo
+                    contador = 1
+                    while nome_limpo in novas_colunas:
+                        nome_limpo = f"{base}_{contador}"
+                        contador += 1
+                    novas_colunas.append(nome_limpo)
+                    
+                df_pauta.columns = novas_colunas
                 
-                st.success("Planilha lida com sucesso! Mapeie as colunas abaixo:")
+                st.success("✅ Planilha lida com sucesso! Mapeie as colunas abaixo:")
                 
                 c_map1, c_map2 = st.columns(2)
                 nome_solic_auto = c_map1.text_input("Nome desta Solicitação Geral:", value=f"PAUTA CONSOLIDADA - {arquivo_pauta.name.split('.')[0]}")
@@ -449,10 +469,16 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 
                 c_map3, c_map4, c_map5 = st.columns(3)
                 
-                # Tentar advinhar as colunas
+                # Achar as colunas automaticamente (mesmo que tenham nomes levemente diferentes)
                 idx_desc = list(df_pauta.columns).index("ESPECIFICAÇÃO") if "ESPECIFICAÇÃO" in df_pauta.columns else 0
                 idx_unid = list(df_pauta.columns).index("UNID.") if "UNID." in df_pauta.columns else 0
-                idx_total = list(df_pauta.columns).index("TOTAL") if "TOTAL" in df_pauta.columns else len(df_pauta.columns)-1
+                
+                # Para o TOTAL, procuramos a coluna chamada TOTAL, senão usamos a última coluna
+                idx_total = len(df_pauta.columns) - 1
+                for i, col in enumerate(df_pauta.columns):
+                    if col == "TOTAL":
+                        idx_total = i
+                        break
                 
                 col_desc = c_map3.selectbox("Coluna da Descrição do Item:", df_pauta.columns, index=idx_desc)
                 col_unid = c_map4.selectbox("Coluna da Unidade de Medida:", df_pauta.columns, index=idx_unid)
@@ -462,12 +488,10 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     conn = conectar_banco()
                     num_gerado = f"PAUTA-{datetime.now().strftime('%m%d%H%M')}"
                     
-                    # Cria a Solicitação Master
                     cursor = conn.cursor()
                     cursor.execute("INSERT INTO solicitacoes (numero_solic, secretaria, data_solic, status) VALUES (?, ?, ?, ?)", (num_gerado, nome_solic_auto.upper(), datetime.now().strftime('%d/%m/%Y'), 'ABERTA'))
                     id_solic_master = cursor.lastrowid
                     
-                    # Agrupar itens por Lote ou jogar tudo num lote único
                     if col_lote != "Sem Lote":
                         grupos_lote = df_pauta.groupby(col_lote)
                     else:
@@ -475,7 +499,7 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                         
                     for nome_lote, df_grupo in grupos_lote:
                         lote_limpo = str(nome_lote).upper().strip()
-                        if not lote_limpo or lote_limpo == 'NAN': continue
+                        if not lote_limpo or lote_limpo == 'NAN' or 'VAZIO' in lote_limpo: continue
                         
                         cursor.execute("INSERT INTO lotes_solicitacao (id_solicitacao, nome_lote, desc_lote) VALUES (?, ?, ?)", (id_solic_master, lote_limpo, ""))
                         id_lote_master = cursor.lastrowid
@@ -485,7 +509,7 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             unid_val = str(row_item[col_unid]).strip().upper()
                             qtd_val = pd.to_numeric(row_item[col_qtd], errors='coerce')
                             
-                            if desc_val and desc_val != 'NAN' and pd.notna(qtd_val) and qtd_val > 0:
+                            if desc_val and desc_val != 'NAN' and 'VAZIO' not in desc_val and pd.notna(qtd_val) and qtd_val > 0:
                                 cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val, float(qtd_val)))
                     
                     conn.commit()
@@ -493,7 +517,7 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     st.success("✅ Pauta Consolidada importada com sucesso! Você já pode ir para a Aba 2 (Painel Central) cotar os itens.")
                     
             except Exception as e:
-                st.error(f"Erro ao processar o arquivo. Verifique se escolheu as colunas certas. Erro técnico: {e}")
+                st.error(f"Erro ao processar o arquivo. Detalhe técnico: {e}")
 
     st.divider()
 
@@ -618,7 +642,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
-    # === LOGICA DO VAREJADOR IA OMITIDA PARA ENCURTAR (MANTÉM O MESMO DA V2.5) ===
     def acionar_varejador(termo_busca, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(1.5) 
