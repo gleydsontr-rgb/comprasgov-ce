@@ -9,15 +9,75 @@ from datetime import datetime
 from io import BytesIO
 
 # ==========================================
-# CONFIGURAÇÃO DA PÁGINA E MEMÓRIA
+# BIBLIOTECAS EXTERNAS (PDF E VAREJADOR)
 # ==========================================
-st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
-
 try:
     from fpdf import FPDF
 except ImportError:
     st.error("⚠️ Atenção: A biblioteca de PDFs não está instalada. Abra o terminal e digite: pip install fpdf")
 
+try:
+    import requests
+except ImportError:
+    st.error("⚠️ Atenção: A biblioteca requests não está instalada. Abra o terminal e digite: pip install requests")
+
+# ==========================================
+# CONFIGURAÇÃO DA PÁGINA E MEMÓRIA
+# ==========================================
+st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+
+# ==========================================
+# 🎨 INJEÇÃO DE CSS (O VISUAL CORPORATIVO TIPO SIGAA)
+# ==========================================
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    .stApp { background-color: #f4f6f9; }
+    .portal-header {
+        background-color: #003366; 
+        color: white;
+        padding: 15px 20px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        border-bottom: 5px solid #F2A900; 
+        margin-top: -80px; 
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .portal-title {
+        font-size: 26px;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: 1px;
+    }
+    .portal-subtitle {
+        font-size: 13px;
+        font-weight: 400;
+        color: #d1e0e0;
+        margin-top: 2px;
+    }
+    div[role="radiogroup"] {
+        flex-direction: row;
+        background-color: #e0e4e8;
+        padding: 10px;
+        border-radius: 4px;
+        border: 1px solid #c0c8d1;
+        justify-content: center;
+        gap: 20px;
+    }
+    h1, h2, h3 { color: #003366 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .stButton>button[data-baseweb="button"] { border-radius: 4px; font-weight: bold; }
+</style>
+<div class="portal-header">
+    <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
+    <p class="portal-subtitle">Painel Administrativo | Controle de Cotações e Planejamento | v2.2 Varejador Adaptativo</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ==========================================
+# INICIALIZAÇÃO DE VARIÁVEIS DE MEMÓRIA
+# ==========================================
 if 'carrinho' not in st.session_state:
     st.session_state.carrinho = pd.DataFrame()
 else:
@@ -51,14 +111,11 @@ def conectar_banco():
     conn.execute('PRAGMA journal_mode=WAL;')
     
     cursor = conn.cursor()
-    # Cria a tabela com a estrutura inicial
     cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT)''')
-    
-    # ✅ A CORREÇÃO DE ARQUITETO: Atualiza a sua tabela antiga para receber o "Número da Solicitação" sem dar erro.
     try:
         cursor.execute("ALTER TABLE solicitacoes ADD COLUMN numero_solic TEXT")
     except sqlite3.OperationalError:
-        pass # Se a coluna já existir, ele ignora o erro e continua funcionando perfeitamente.
+        pass 
         
     cursor.execute('''CREATE TABLE IF NOT EXISTS lotes_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_solicitacao INTEGER, nome_lote TEXT, desc_lote TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT, quantidade REAL)''')
@@ -67,7 +124,7 @@ def conectar_banco():
     return conn
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (MANTIDA INTACTA E OFICIAL)
+# 📄 FÁBRICA DE PDFs (INTACTA)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, orgao, processo, tipo_relatorio):
@@ -355,17 +412,20 @@ else:
     st.sidebar.info("Carrinho vazio. Pesquise ou adicione links para gerar relatórios.")
 
 # ==========================================
-# 🗂️ SISTEMA DE ABAS (ORIGINAL SEM BUGS)
+# 🗂️ O MENU DE NAVEGAÇÃO "CORPORATIVO"
 # ==========================================
-aba_solic, aba_cotacao = st.tabs(["📝 1. Aba de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"])
+aba_selecionada = st.radio(
+    "Escolha o Módulo:",
+    ["📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
 
 # ==========================================
-# ABA 1: SOLICITAÇÃO (PLANEJAMENTO)
+# TELA 1: SOLICITAÇÃO (PLANEJAMENTO)
 # ==========================================
-with aba_solic:
-    st.title("📝 Cadastro de Solicitações e Lotes")
+if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     
-    # ✅ ZERAR SOLICITAÇÕES APENAS
     c_z1, c_z2 = st.columns([4, 1])
     if c_z2.button("⚠️ Zerar Solicitações"):
         conn = conectar_banco()
@@ -378,14 +438,12 @@ with aba_solic:
         st.success("Tudo zerado! Vamos recomeçar.")
         st.rerun()
     
-    # ✅ CRIAR SOLICITAÇÃO COM NÚMERO
     with st.expander("1️⃣ CADASTRAR NOVA SOLICITAÇÃO DA SECRETARIA", expanded=True):
         nome_sec = st.text_input("Nome da Secretaria Solicitante (Ex: SECRETARIA DE EDUCAÇÃO)")
         if st.button("Criar Nova Solicitação"):
             if nome_sec:
                 num_gerado = f"{datetime.now().strftime('%Y.%m%d%H%M')}"
                 conn = conectar_banco()
-                # Repare: Como usamos o ALTER TABLE lá no topo, agora o banco de dados tem a coluna e aceita o número!
                 conn.execute("INSERT INTO solicitacoes (numero_solic, secretaria, data_solic, status) VALUES (?, ?, ?, ?)", (num_gerado, nome_sec.upper(), datetime.now().strftime('%d/%m/%Y'), 'ABERTA'))
                 conn.commit()
                 conn.close()
@@ -396,7 +454,7 @@ with aba_solic:
     try:
         df_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
     except:
-        df_solic = pd.DataFrame() # Prevenção de erro caso o banco não tenha atualizado a tempo
+        df_solic = pd.DataFrame() 
     
     if not df_solic.empty:
         st.divider()
@@ -451,16 +509,16 @@ with aba_solic:
         
         if not df_itens.empty:
             st.dataframe(df_itens, use_container_width=True, hide_index=True)
-            st.success("✅ O seu planejamento está salvo. Vá para a Aba 2 para importar a planilha e iniciar as pesquisas.")
+            st.success("✅ Planejamento salvo com sucesso. Suba e clique na Aba '2. Painel Central' para pesquisar.")
         else:
             st.info("Nenhum item cadastrado nesta solicitação.")
             
     conn.close()
 
 # ==========================================
-# ABA 2: COTAÇÃO E PESQUISA MANUAL
+# TELA 2: COTAÇÃO E PESQUISA (COM VAREJADOR NACIONAL AUTOMÁTICO)
 # ==========================================
-with aba_cotacao:
+elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     
     st.subheader("📥 1. Importar Itens da Solicitação")
     conn = conectar_banco()
@@ -497,14 +555,9 @@ with aba_cotacao:
     conn.close()
     st.divider()
 
-    # ==========================================
-    # 🎛️ PAINEL MANUAL DE BUSCA (100% INTACTO)
-    # ==========================================
-    st.title("📊 2. Painel Central de Análise de Preços (Busca Manual)")
+    st.subheader("2. Buscar no Banco do Governo (PNCP)")
 
     with st.form("form_consulta"):
-        st.subheader("Buscar no Banco do Governo (PNCP)")
-        
         valor_padrao_p1 = ""
         if item_para_cotar:
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS']
@@ -586,18 +639,120 @@ with aba_cotacao:
                             else:
                                 df = df[df['descricao_item'].str.contains(p, na=False)]
                 
-                if not df.empty:
+                if not df.empty and len(df) >= 3:
                     df.insert(0, 'Selecionar', False)
                     df['municipio'] = df['municipio'].fillna('Não Informado')
                     df['data_assinatura'] = pd.to_datetime(df['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                     
                     st.session_state.df_resultados = df
                 else:
-                    st.session_state.df_resultados = pd.DataFrame() 
-                    st.warning("A Busca Inteligente não encontrou o item como PRODUTO PRINCIPAL. Tente alterar a inteligência para 'Ampla'.")
+                    qtd_local = len(df) if not df.empty else 0
+                    if qtd_local > 0:
+                        st.warning(f"⚠️ Encontramos apenas {qtd_local} resultado(s) no Ceará. O mapa exige 3 cotações.")
+                    else:
+                        st.warning("⚠️ O Filtro Inteligente não encontrou resultados exatos no Ceará.")
+                        
+                    with st.spinner("🌐 Acionando o Varejador Nacional... Buscando preços em outros estados do Brasil para completar o mapa!"):
+                        time.sleep(1.5) 
+                        termo_varejo = remover_acentos(p1) if p1 else "ITEM"
+                        # O FILTRO DO ESPAÇO PARA A API (A SOLUÇÃO DO VAREJADOR)
+                        termo_varejo_url = termo_varejo.replace(" ", "+")
+                        
+                        df_varejador = pd.DataFrame()
+                        try:
+                            url_api = f"https://pncp.gov.br/api/search/?q={termo_varejo_url}&tipos_documento=item"
+                            headers = {'User-Agent': 'Mozilla/5.0'}
+                            resposta = requests.get(url_api, headers=headers, timeout=8)
+                            if resposta.status_code == 200:
+                                dados = resposta.json()
+                                itens_api = dados.get('items', [])
+                                lista_vars = []
+                                for i, it in enumerate(itens_api[:50]):
+                                    valor_est = float(it.get('valorUnitarioEstimado', 0))
+                                    if valor_est > 0:
+                                        lista_vars.append({
+                                            'descricao_item': str(it.get('title', termo_varejo)).upper(),
+                                            'unid_medida': 'UN',
+                                            'valor_unitario': valor_est,
+                                            'municipio': 'DADOS NACIONAIS',
+                                            'estado': 'BR',
+                                            'credor': 'FORNECEDOR VIA VAREJADOR',
+                                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'),
+                                            'id_item': f"VAR-{int(time.time())}-{i}",
+                                            'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')),
+                                            'origem': 'VAREJADOR NACIONAL'
+                                        })
+                                if lista_vars:
+                                    df_varejador = pd.DataFrame(lista_vars)
+                        except Exception as e:
+                            pass
+                            
+                        if not df_varejador.empty:
+                            if not df.empty:
+                                df['municipio'] = df['municipio'].fillna('Não Informado')
+                                df['data_assinatura'] = pd.to_datetime(df['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                                df_final = pd.concat([df, df_varejador], ignore_index=True)
+                            else:
+                                df_final = df_varejador
+                                
+                            df_final.insert(0, 'Selecionar', False)
+                            st.session_state.df_resultados = df_final
+                            st.success("✅ O Varejador encontrou resultados a nível Nacional e completou a lista! Selecione os itens abaixo.")
+                        else:
+                            if not df.empty:
+                                df.insert(0, 'Selecionar', False)
+                                df['municipio'] = df['municipio'].fillna('Não Informado')
+                                df['data_assinatura'] = pd.to_datetime(df['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                                st.session_state.df_resultados = df
+                                st.error("❌ O Varejador Nacional não encontrou mais itens. Tente usar palavras mais genéricas para completar o mapa.")
+                            else:
+                                st.session_state.df_resultados = pd.DataFrame()
+                                st.error("❌ O Varejador Nacional também não encontrou este item. Tente usar palavras mais genéricas.")
             else:
-                st.session_state.df_resultados = pd.DataFrame() 
-                st.warning("Nenhum item público encontrado nesse período.")
+                st.warning("⚠️ Nenhum item encontrado no Ceará.")
+                with st.spinner("🌐 Acionando o Varejador Nacional... Buscando preços em outros estados do Brasil!"):
+                    time.sleep(1.5)
+                    termo_varejo = remover_acentos(p1) if p1 else "ITEM"
+                    # O FILTRO DO ESPAÇO PARA A API (A SOLUÇÃO DO VAREJADOR)
+                    termo_varejo_url = termo_varejo.replace(" ", "+")
+                    
+                    df_varejador = pd.DataFrame()
+                    try:
+                        url_api = f"https://pncp.gov.br/api/search/?q={termo_varejo_url}&tipos_documento=item"
+                        headers = {'User-Agent': 'Mozilla/5.0'}
+                        resposta = requests.get(url_api, headers=headers, timeout=8)
+                        if resposta.status_code == 200:
+                            dados = resposta.json()
+                            itens_api = dados.get('items', [])
+                            lista_vars = []
+                            for i, it in enumerate(itens_api[:50]):
+                                valor_est = float(it.get('valorUnitarioEstimado', 0))
+                                if valor_est > 0:
+                                    lista_vars.append({
+                                        'descricao_item': str(it.get('title', termo_varejo)).upper(),
+                                        'unid_medida': 'UN',
+                                        'valor_unitario': valor_est,
+                                        'municipio': 'DADOS NACIONAIS',
+                                        'estado': 'BR',
+                                        'credor': 'FORNECEDOR VIA VAREJADOR',
+                                        'data_assinatura': datetime.now().strftime('%d/%m/%Y'),
+                                        'id_item': f"VAR-{int(time.time())}-{i}",
+                                        'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')),
+                                        'origem': 'VAREJADOR NACIONAL'
+                                    })
+                        if lista_vars:
+                            df_varejador = pd.DataFrame(lista_vars)
+                    except Exception as e:
+                        pass
+                        
+                    if not df_varejador.empty:
+                        df_varejador.insert(0, 'Selecionar', False)
+                        st.session_state.df_resultados = df_varejador
+                        st.success("✅ O Varejador encontrou resultados a nível Nacional! Selecione os itens abaixo.")
+                    else:
+                        st.session_state.df_resultados = pd.DataFrame()
+                        st.error("❌ O Varejador Nacional também não encontrou este item. Tente usar palavras mais genéricas.")
+
         except Exception as e:
             st.error(f"Erro no banco: {e}")
         conn.close()
