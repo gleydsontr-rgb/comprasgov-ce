@@ -1,0 +1,35 @@
+name: Atualizador Diario do Banco de Precos
+
+on:
+  schedule:
+    # Roda todos os dias às 03:00 da madrugada
+    - cron: '0 3 * * *' 
+  workflow_dispatch: # Botão manual para você testar quando quiser
+
+jobs:
+  atualizar-banco:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Clonando o repositório
+        uses: actions/checkout@v3
+
+      - name: 🐍 Configurando o Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Instalando as Ferramentas
+        run: |
+          pip install requests pandas urllib3
+
+      - name: 🐺 Rodando o Robô Invisível
+        run: python robo_invisivel.py
+
+      - name: 💾 Salvando o Banco Atualizado na Nuvem
+        run: |
+          git config --global user.name "Robo Atualizador"
+          git config --global user.email "robo@comprasgov.com"
+          git add banco_compras.db
+          git commit -m "🐺 Atualização diária automática (Robô Invisível)" || exit 0
+          git push
