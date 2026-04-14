@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v4.0 Pipeline de Dados Inquebrável</p>
+    <p class="portal-subtitle">Painel Administrativo | v4.1 Pipeline e Elementos Blindados</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -584,7 +584,6 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             conn.commit()
                             st.rerun()
                             
-        # O SEGREDO DO ESPECIALISTA: Extração blindada via Pandas
         df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
         df_itens = pd.DataFrame()
         if not df_bruto.empty:
@@ -620,7 +619,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     if 'solic_importada' in st.session_state:
         id_imp = st.session_state['solic_importada']
         
-        # O SEGREDO DO ESPECIALISTA (ABA 2): Extração cega e inquebrável
         df_bruto_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
         df_itens_imp = pd.DataFrame()
         
@@ -652,22 +650,22 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             valor_padrao_p1 = " ".join(palavras[:3]) if palavras else remover_acentos(item_para_cotar)[:20]
             
         c1, c2, c3, c4 = st.columns(4)
-        p1 = c1.text_input("Palavra Principal", value=valor_padrao_p1)
-        p2 = c2.text_input("Contendo também")
-        p3 = c3.text_input("Contendo também")
-        p_excluir = c4.text_input("🚫 NÃO pode conter")
+        p1 = c1.text_input("Palavra Principal", value=valor_padrao_p1, key="p1_busca")
+        p2 = c2.text_input("Contendo também (1)", key="p2_busca")
+        p3 = c3.text_input("Contendo também (2)", key="p3_busca")
+        p_excluir = c4.text_input("🚫 NÃO pode conter", key="pex_busca")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
-        modo_busca = c5.selectbox("🧠 Inteligência da Busca", ["🔍 Ampla (Qualquer parte do texto)", "🎯 Inteligente (Focar no Nome do Produto)"])
-        dt_ini = c6.date_input("Data inicial", value=datetime(2025, 1, 1), format="DD/MM/YYYY")
-        dt_fim = c7.date_input("Data final", format="DD/MM/YYYY")
-        val_ini = c8.number_input("Valor mínimo (R$)", min_value=0.0, step=1.0)
-        val_fim = c9.number_input("Valor máximo (R$)", min_value=0.0, step=1.0)
+        modo_busca = c5.selectbox("🧠 Inteligência da Busca", ["🔍 Ampla (Qualquer parte do texto)", "🎯 Inteligente (Focar no Nome do Produto)"], key="sel_int_busca")
+        dt_ini = c6.date_input("Data inicial", value=datetime(2025, 1, 1), format="DD/MM/YYYY", key="dt_ini_busca")
+        dt_fim = c7.date_input("Data final", format="DD/MM/YYYY", key="dt_fim_busca")
+        val_ini = c8.number_input("Valor mínimo (R$)", min_value=0.0, step=1.0, key="val_min_busca")
+        val_fim = c9.number_input("Valor máximo (R$)", min_value=0.0, step=1.0, key="val_max_busca")
         
         c10, c11, c12 = st.columns([1.5, 3, 1.5])
-        uf = c10.selectbox("UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=1)
-        relevancia = c11.text_input("Busca Exata (A frase exata precisa estar no texto)")
-        ordem = c12.selectbox("Ordenar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
+        uf = c10.selectbox("UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=1, key="sel_uf_busca")
+        relevancia = c11.text_input("Busca Exata (A frase exata precisa estar no texto)", key="input_exata_busca")
+        ordem = c12.selectbox("Ordenar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"], key="sel_ordem_busca")
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
@@ -796,10 +794,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         )
         
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", value=item_para_cotar if item_para_cotar else "ITEM DA COTAÇÃO")
-        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(qtd_alvo_item), step=1.0)
+        nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", value=item_para_cotar if item_para_cotar else "ITEM DA COTAÇÃO", key="input_nome_relatorio")
+        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(qtd_alvo_item), step=1.0, key="input_qtd_relatorio")
         
-        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
+        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True, key="btn_add_carrinho"):
             selecionados = df_editado[df_editado['Selecionar'] == True].copy()
             selecionados = selecionados.drop(columns=['Selecionar'])
             if not selecionados.empty:
