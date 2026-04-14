@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v4.3 Filtro Inteligente e Divisão de Palavras</p>
+    <p class="portal-subtitle">Painel Administrativo | v4.4 Pipeline Imune a Acentos e Cedilhas</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -644,11 +644,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
             
-            # --- O CÉREBRO DE SEPARAÇÃO INTELIGENTE DE PALAVRAS ---
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
-                    # Filtra e divide a Palavra Principal das outras
                     stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM', 'TIPO', 'KG', 'UND', 'PCT', 'CX', 'UNID', 'LOTE']
                     texto_limpo = remover_acentos(item_selecionado).replace('-', ' ').replace(',', ' ').replace('.', ' ')
                     palavras = [p for p in texto_limpo.split() if p not in stopwords and len(p) > 1]
@@ -681,9 +679,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
         
-        p1 = c1.text_input("Palavra Principal", key="p1_busca")
-        p2 = c2.text_input("Contendo também (1)", key="p2_busca")
-        p3 = c3.text_input("Contendo também (2)", key="p3_busca")
+        p1 = c1.text_input("Palavra Principal", value=st.session_state['p1_busca'], key="p1_busca_form")
+        p2 = c2.text_input("Contendo também (1)", value=st.session_state['p2_busca'], key="p2_busca_form")
+        p3 = c3.text_input("Contendo também (2)", value=st.session_state['p3_busca'], key="p3_busca_form")
         p_excluir = c4.text_input("🚫 NÃO pode conter", key="pex_busca")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
@@ -700,14 +698,20 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
+    # ==========================================
+    # VAREJADOR IA (A CURA DO BUG DO AÇÚCAR)
+    # ==========================================
     def acionar_varejador(termo_busca, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(1.5) 
             df_varejador = pd.DataFrame()
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json, text/plain, */*', 'Accept-Language': 'pt-BR,pt;q=0.9'}
+            
+            # Puxa os termos e remove vazios
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
             palavras = [p for p in remover_acentos(termo_busca).split() if p not in stopwords]
             if not palavras: return
+            
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
             try:
@@ -720,11 +724,14 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 
                 lista_vars = []
                 for i, it in enumerate(itens_api[:100]):
-                    titulo_item = str(it.get('title', '')).upper()
-                    if all(p in titulo_item for p in palavras):
+                    titulo_bruto = str(it.get('title', '')).upper()
+                    # A MÁGICA: Limpa o acento do Governo ANTES de verificar
+                    titulo_limpo = remover_acentos(titulo_bruto)
+                    
+                    if all(p in titulo_limpo for p in palavras):
                         valor_est = float(it.get('valorUnitarioEstimado', 0))
                         if valor_est > 0:
-                            lista_vars.append({'descricao_item': titulo_item, 'unid_medida': 'UN', 'valor_unitario': valor_est, 'municipio': 'DADOS NACIONAIS', 'estado': 'BR', 'credor': 'FORNECEDOR VIA VAREJADOR', 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-{int(time.time())}-{i}", 'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 'origem': 'VAREJADOR NACIONAL'})
+                            lista_vars.append({'descricao_item': titulo_bruto, 'unid_medida': 'UN', 'valor_unitario': valor_est, 'municipio': 'DADOS NACIONAIS', 'estado': 'BR', 'credor': 'FORNECEDOR VIA VAREJADOR', 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-{int(time.time())}-{i}", 'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 'origem': 'VAREJADOR NACIONAL'})
                 if lista_vars: df_varejador = pd.DataFrame(lista_vars)
             except Exception: pass
                 
@@ -799,8 +806,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 df['data_assinatura'] = pd.to_datetime(df['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                 st.session_state.df_resultados = df
             else:
-                qtd_local = len(df) if not df.empty else 0
-                termo_varejo = remover_acentos(p1) if p1 else "ITEM"
+                # O VAREJADOR AGORA JUNTA AS 3 CAIXAS DE BUSCA
+                termo_completo = f"{p1} {p2} {p3}".strip()
+                termo_varejo = remover_acentos(termo_completo) if termo_completo else "ITEM"
                 acionar_varejador(termo_varejo, df)
 
         except Exception as e:
@@ -825,8 +833,8 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         )
         
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", key="input_nome_relatorio")
-        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="input_qtd_relatorio")
+        nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", value=st.session_state['input_nome_relatorio'], key="input_nome_relatorio_form")
+        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['input_qtd_relatorio']), step=1.0, key="input_qtd_relatorio_form")
         
         if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True, key="btn_add_carrinho"):
             selecionados = df_editado[df_editado['Selecionar'] == True].copy()
@@ -846,7 +854,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1])
         desc_int = c_int1.text_input("Descrição")
         unid_int = c_int2.text_input("Unidade")
-        qtd_int = c_int5.number_input("Quantidade", step=1.0, key="input_qtd_internet") 
+        qtd_int = c_int5.number_input("Quantidade", value=float(st.session_state['input_qtd_internet']), step=1.0, key="input_qtd_internet_form") 
         
         c_int3, c_int4 = st.columns([2, 1])
         forn_int = c_int3.text_input("Loja e CNPJ")
