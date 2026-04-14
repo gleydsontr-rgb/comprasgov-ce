@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v3.3 Importador Seguro e PDFs Dinâmicos</p>
+    <p class="portal-subtitle">Painel Administrativo | v3.4 Código Limpo (Sem Duplicatas)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -403,21 +403,16 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     c_z1, c_z2 = st.columns([4, 1])
     if c_z2.button("⚠️ Zerar Banco de Solicitações", key="btn_zerar_banco"):
         conn = conectar_banco()
-        # O REMÉDIO CIRÚRGICO: Destrói as tabelas para recriá-las saudáveis
         conn.execute("DROP TABLE IF EXISTS solicitacoes")
         conn.execute("DROP TABLE IF EXISTS lotes_solicitacao")
         conn.execute("DROP TABLE IF EXISTS itens_solicitacao")
         conn.commit()
         conn.close()
-        
-        # Reconecta para criar as tabelas com a estrutura certa
         conectar_banco()
-        
         if 'solic_importada' in st.session_state: del st.session_state['solic_importada']
         st.success("✅ Estrutura do banco corrigida e limpa! Pode importar a pauta novamente.")
         st.rerun()
 
-    # --- IMPORTADOR AUTOMÁTICO DE PAUTAS (BLINDADO) ---
     st.markdown("### 📥 Importação Automática de Pautas Consolidadas")
     with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens", expanded=False):
         arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta (Ex: PAUTA.csv)", type=["csv", "xlsx"], key="file_up_pauta")
@@ -447,20 +442,18 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     df_pauta.columns = df_pauta.iloc[idx_header]
                     df_pauta = df_pauta.iloc[idx_header+1:].dropna(how='all')
                 
-                # Remoção de colunas com nome duplicado para evitar erros do Streamlit
                 novas_colunas = []
                 for c in df_pauta.columns:
                     nome_limpo = str(c).strip().upper()
                     if nome_limpo == 'NAN' or nome_limpo == '':
                         nome_limpo = 'VAZIO'
-                    
                     base = nome_limpo
                     contador = 1
                     while nome_limpo in novas_colunas:
                         nome_limpo = f"{base}_{contador}"
                         contador += 1
                     novas_colunas.append(nome_limpo)
-                    
+                        
                 df_pauta.columns = novas_colunas
                 
                 st.success("✅ Planilha lida com sucesso! Mapeie as colunas abaixo:")
