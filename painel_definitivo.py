@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v3.1 Importador de Pautas Blindado e PDFs Dinâmicos</p>
+    <p class="portal-subtitle">Painel Administrativo | v3.3 Importador Seguro e PDFs Dinâmicos</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -107,7 +107,7 @@ def conectar_banco():
     return conn
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (AGORA COM QUANTIDADES REAIS)
+# 📄 FÁBRICA DE PDFs (COM QUANTIDADES REAIS)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, orgao, processo, tipo_relatorio):
@@ -355,7 +355,7 @@ st.sidebar.title("🛒 Carrinho de Cotação")
 if not st.session_state.carrinho.empty:
     st.sidebar.success(f"Você tem {len(st.session_state.carrinho)} cotações separadas.")
     st.sidebar.dataframe(st.session_state.carrinho[['produto_mapa', 'valor_unitario', 'quantidade']], hide_index=True)
-    if st.sidebar.button("🗑️ Esvaziar Carrinho"):
+    if st.sidebar.button("🗑️ Esvaziar Carrinho", key="btn_esvaziar"):
         st.session_state.carrinho = pd.DataFrame()
         if 'pdfs_prontos' in st.session_state: del st.session_state['pdfs_prontos']
         st.rerun()
@@ -383,10 +383,10 @@ if not st.session_state.carrinho.empty:
     if 'pdfs_prontos' in st.session_state:
         st.sidebar.success("✅ Kit de Licitação Pronto!")
         proc_salvo = st.session_state['pdfs_prontos']['numero_proc']
-        st.sidebar.download_button("1️⃣ CAPA DO PROCESSO", data=st.session_state['pdfs_prontos']['capa'], file_name=f"1_Capa_{proc_salvo}.pdf", mime="application/pdf")
-        st.sidebar.download_button("2️⃣ MAPA DE PREÇOS", data=st.session_state['pdfs_prontos']['mapa'], file_name=f"2_Mapa_{proc_salvo}.pdf", mime="application/pdf", type="primary")
-        st.sidebar.download_button("3️⃣ RELATÓRIO PNCP", data=st.session_state['pdfs_prontos']['pncp'], file_name=f"3_Rel_PNCP_{proc_salvo}.pdf", mime="application/pdf")
-        st.sidebar.download_button("4️⃣ RELATÓRIO INTERNET", data=st.session_state['pdfs_prontos']['link'], file_name=f"4_Rel_Internet_{proc_salvo}.pdf", mime="application/pdf")
+        st.sidebar.download_button("1️⃣ CAPA DO PROCESSO", data=st.session_state['pdfs_prontos']['capa'], file_name=f"1_Capa_{proc_salvo}.pdf", mime="application/pdf", key="dl_capa")
+        st.sidebar.download_button("2️⃣ MAPA DE PREÇOS", data=st.session_state['pdfs_prontos']['mapa'], file_name=f"2_Mapa_{proc_salvo}.pdf", mime="application/pdf", type="primary", key="dl_mapa")
+        st.sidebar.download_button("3️⃣ RELATÓRIO PNCP", data=st.session_state['pdfs_prontos']['pncp'], file_name=f"3_Rel_PNCP_{proc_salvo}.pdf", mime="application/pdf", key="dl_pncp")
+        st.sidebar.download_button("4️⃣ RELATÓRIO INTERNET", data=st.session_state['pdfs_prontos']['link'], file_name=f"4_Rel_Internet_{proc_salvo}.pdf", mime="application/pdf", key="dl_link")
 else:
     st.sidebar.info("Carrinho vazio. Pesquise e adicione cotações para gerar os relatórios oficiais.")
 
@@ -396,30 +396,34 @@ else:
 aba_selecionada = st.radio("Escolha o Módulo:", ["📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed")
 
 # ==========================================
-# TELA 1: SOLICITAÇÃO (CRIADOR MANUAL E IMPORTADOR DE PAUTA)
+# TELA 1: SOLICITAÇÃO E IMPORTADOR
 # ==========================================
 if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     
     c_z1, c_z2 = st.columns([4, 1])
-    if c_z2.button("⚠️ Zerar Banco de Solicitações"):
+    if c_z2.button("⚠️ Zerar Banco de Solicitações", key="btn_zerar_banco"):
         conn = conectar_banco()
-        conn.execute("DELETE FROM solicitacoes")
-        conn.execute("DELETE FROM lotes_solicitacao")
-        conn.execute("DELETE FROM itens_solicitacao")
+        # O REMÉDIO CIRÚRGICO: Destrói as tabelas para recriá-las saudáveis
+        conn.execute("DROP TABLE IF EXISTS solicitacoes")
+        conn.execute("DROP TABLE IF EXISTS lotes_solicitacao")
+        conn.execute("DROP TABLE IF EXISTS itens_solicitacao")
         conn.commit()
         conn.close()
+        
+        # Reconecta para criar as tabelas com a estrutura certa
+        conectar_banco()
+        
         if 'solic_importada' in st.session_state: del st.session_state['solic_importada']
-        st.success("Tudo zerado! Banco de planejamento limpo.")
+        st.success("✅ Estrutura do banco corrigida e limpa! Pode importar a pauta novamente.")
         st.rerun()
 
-    # --- NOVO: IMPORTADOR AUTOMÁTICO DE PAUTAS (VERSÃO 3.1 - BLINDADO CONTRA ERROS) ---
+    # --- IMPORTADOR AUTOMÁTICO DE PAUTAS (BLINDADO) ---
     st.markdown("### 📥 Importação Automática de Pautas Consolidadas")
-    with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens e as quantidades totais", expanded=False):
-        arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta (Ex: PAUTA GÊNEROS ALIMENTÍCIOS.csv)", type=["csv", "xlsx"])
+    with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens", expanded=False):
+        arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta (Ex: PAUTA.csv)", type=["csv", "xlsx"], key="file_up_pauta")
         
         if arquivo_pauta:
             try:
-                # 1. Leitura inteligente com blindagem de caracteres (encoding)
                 if arquivo_pauta.name.endswith('.csv'):
                     try:
                         df_pauta = pd.read_csv(arquivo_pauta, sep=None, engine='python', on_bad_lines='skip', encoding='utf-8')
@@ -430,10 +434,9 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     try:
                         df_pauta = pd.read_excel(arquivo_pauta)
                     except ImportError:
-                        st.error("⚠️ Falta a biblioteca para ler Excel. No terminal, digite: pip install openpyxl")
+                        st.error("⚠️ Falta a biblioteca para ler Excel. O openpyxl deve ser instalado.")
                         st.stop()
                 
-                # 2. Procurar o cabeçalho real (linha que tem a palavra ESPECIFICAÇÃO ou LOTE)
                 idx_header = None
                 for i, row in df_pauta.iterrows():
                     if row.astype(str).str.contains('ESPECIFICAÇÃO', case=False, na=False).any() or row.astype(str).str.contains('LOTE', case=False, na=False).any():
@@ -444,14 +447,13 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     df_pauta.columns = df_pauta.iloc[idx_header]
                     df_pauta = df_pauta.iloc[idx_header+1:].dropna(how='all')
                 
-                # 3. O TRUQUE DE MESTRE: Limpar colunas e remover duplicadas (Que travam o Streamlit)
+                # Remoção de colunas com nome duplicado para evitar erros do Streamlit
                 novas_colunas = []
                 for c in df_pauta.columns:
                     nome_limpo = str(c).strip().upper()
                     if nome_limpo == 'NAN' or nome_limpo == '':
                         nome_limpo = 'VAZIO'
                     
-                    # Se tiver coluna com nome repetido (ex: VAZIO, VAZIO), adiciona um número
                     base = nome_limpo
                     contador = 1
                     while nome_limpo in novas_colunas:
@@ -464,27 +466,24 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 st.success("✅ Planilha lida com sucesso! Mapeie as colunas abaixo:")
                 
                 c_map1, c_map2 = st.columns(2)
-                nome_solic_auto = c_map1.text_input("Nome desta Solicitação Geral:", value=f"PAUTA CONSOLIDADA - {arquivo_pauta.name.split('.')[0]}")
-                col_lote = c_map2.selectbox("Coluna do Lote (Opcional):", ["Sem Lote"] + list(df_pauta.columns), index=1 if "LOTE" in df_pauta.columns else 0)
+                nome_solic_auto = c_map1.text_input("Nome desta Solicitação Geral:", value=f"PAUTA CONSOLIDADA - {arquivo_pauta.name.split('.')[0]}", key="input_nome_pauta")
+                col_lote = c_map2.selectbox("Coluna do Lote (Opcional):", ["Sem Lote"] + list(df_pauta.columns), index=1 if "LOTE" in df_pauta.columns else 0, key="sel_col_lote")
                 
                 c_map3, c_map4, c_map5 = st.columns(3)
-                
-                # Achar as colunas automaticamente (mesmo que tenham nomes levemente diferentes)
                 idx_desc = list(df_pauta.columns).index("ESPECIFICAÇÃO") if "ESPECIFICAÇÃO" in df_pauta.columns else 0
                 idx_unid = list(df_pauta.columns).index("UNID.") if "UNID." in df_pauta.columns else 0
                 
-                # Para o TOTAL, procuramos a coluna chamada TOTAL, senão usamos a última coluna
                 idx_total = len(df_pauta.columns) - 1
                 for i, col in enumerate(df_pauta.columns):
                     if col == "TOTAL":
                         idx_total = i
                         break
                 
-                col_desc = c_map3.selectbox("Coluna da Descrição do Item:", df_pauta.columns, index=idx_desc)
-                col_unid = c_map4.selectbox("Coluna da Unidade de Medida:", df_pauta.columns, index=idx_unid)
-                col_qtd = c_map5.selectbox("Coluna da Quantidade TOTAL (Soma das secretarias):", df_pauta.columns, index=idx_total)
+                col_desc = c_map3.selectbox("Coluna da Descrição do Item:", df_pauta.columns, index=idx_desc, key="sel_col_desc")
+                col_unid = c_map4.selectbox("Coluna da Unidade de Medida:", df_pauta.columns, index=idx_unid, key="sel_col_unid")
+                col_qtd = c_map5.selectbox("Coluna da Quantidade TOTAL:", df_pauta.columns, index=idx_total, key="sel_col_qtd")
                 
-                if st.button("🚀 Processar Pauta e Salvar no Banco"):
+                if st.button("🚀 Processar Pauta e Salvar no Banco", key="btn_proc_pauta"):
                     conn = conectar_banco()
                     num_gerado = f"PAUTA-{datetime.now().strftime('%m%d%H%M')}"
                     
@@ -522,8 +521,8 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     st.divider()
 
     with st.expander("✏️ OPÇÃO MANUAL: Cadastrar Solicitação Secretaria por Secretaria", expanded=False):
-        nome_sec = st.text_input("Nome da Secretaria (Ex: SECRETARIA DE EDUCAÇÃO)")
-        if st.button("Criar Nova Solicitação"):
+        nome_sec = st.text_input("Nome da Secretaria (Ex: SECRETARIA DE EDUCAÇÃO)", key="input_nome_sec_man")
+        if st.button("Criar Nova Solicitação", key="btn_nova_solic_man"):
             if nome_sec:
                 num_gerado = f"{datetime.now().strftime('%Y.%m%d%H%M')}"
                 conn = conectar_banco()
@@ -539,7 +538,7 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     
     if not df_solic.empty:
         st.subheader("📋 VISUALIZAR E ADICIONAR ITENS")
-        solic_selecionada = st.selectbox("Selecione a Solicitação no Banco", df_solic['id'].astype(str) + " - " + df_solic['secretaria'])
+        solic_selecionada = st.selectbox("Selecione a Solicitação no Banco", df_solic['id'].astype(str) + " - " + df_solic['secretaria'], key="sel_solic_banco")
         id_solic = int(solic_selecionada.split(" - ")[0])
         
         c_lote, c_item = st.columns(2)
@@ -585,15 +584,15 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
     if not df_todas_solic.empty:
         c_imp1, c_imp2 = st.columns([4, 1])
-        solic_escolhida = c_imp1.selectbox("Selecione a Pauta/Solicitação para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
+        solic_escolhida = c_imp1.selectbox("Selecione a Pauta/Solicitação para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'], key="sel_pauta_cotar")
         id_solic_imp = int(solic_escolhida.split(" - ")[0])
         
-        if c_imp2.button("📥 Carregar Planilha", use_container_width=True):
+        if c_imp2.button("📥 Carregar Planilha", use_container_width=True, key="btn_load_pauta"):
             st.session_state['solic_importada'] = id_solic_imp
             st.rerun()
 
     item_para_cotar = ""
-    qtd_alvo_item = 1.0 # O PULO DO GATO: Valor padrão de quantidade
+    qtd_alvo_item = 1.0 
     
     if 'solic_importada' in st.session_state:
         id_imp = st.session_state['solic_importada']
@@ -604,9 +603,8 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             st.dataframe(df_itens_imp, use_container_width=True, hide_index=True)
             
             lista_produtos = df_itens_imp['Produto'].tolist()
-            item_para_cotar = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos)
+            item_para_cotar = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
             if item_para_cotar:
-                # O PULO DO GATO: Pegando a quantidade exata lá da pauta importada
                 qtd_alvo_item = float(df_itens_imp[df_itens_imp['Produto'] == item_para_cotar]['Qtd'].iloc[0])
                 st.success(f"✔️ Item: **{item_para_cotar}** | 📦 Quantidade Total Solicitada: **{qtd_alvo_item}**")
     
@@ -788,7 +786,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1])
         desc_int = c_int1.text_input("Descrição")
         unid_int = c_int2.text_input("Unidade")
-        qtd_int = c_int5.number_input("Quantidade", value=float(qtd_alvo_item), step=1.0) # Pegando a qtd alvo tbm
+        qtd_int = c_int5.number_input("Quantidade", value=float(qtd_alvo_item), step=1.0) 
         
         c_int3, c_int4 = st.columns([2, 1])
         forn_int = c_int3.text_input("Loja e CNPJ")
