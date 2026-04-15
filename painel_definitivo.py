@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v6.2 Memória Sombra Anti-Amnésia</p>
+    <p class="portal-subtitle">Painel Administrativo | v6.3 Memória de Abas e Bloqueio de Apagão</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,13 +58,11 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
-# CHAVES BLINDADAS E MEMÓRIA SOMBRA (SHADOW MEMORY)
+# CHAVES BLINDADAS E MEMÓRIA SOMBRA
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
-    'input_nome_relatorio_form': "ITEM DA COTAÇÃO",
-    'input_qtd_relatorio_form': 1.0, 'input_qtd_internet_form': 1.0,
     'ultimo_item_selecionado': "", 'search_id': "default",
-    'mem_nome_relatorio': "ITEM DA COTAÇÃO", 'mem_qtd_relatorio': 1.0 # <-- A MEMÓRIA SOMBRA
+    'mem_nome_relatorio': "ITEM DA COTAÇÃO", 'mem_qtd_relatorio': 1.0 
 }
 for key, value in keys_to_init.items():
     if key not in st.session_state: st.session_state[key] = value
@@ -133,7 +131,6 @@ def salvar_carrinho_no_banco():
         if st.session_state.carrinho.empty:
             conn.execute("DELETE FROM cotacoes_salvas WHERE id_solicitacao=?", (id_imp,))
         else:
-            # Exterminador de Fantasmas 2.0 antes de salvar
             df_valido = st.session_state.carrinho[st.session_state.carrinho['produto_mapa'].str.strip() != ""]
             json_data = df_valido.to_json(orient='records')
             conn.execute("REPLACE INTO cotacoes_salvas (id_solicitacao, dados_json) VALUES (?, ?)", (id_imp, json_data))
@@ -141,7 +138,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (COM LOGO E CNPJ CORPORATIVO)
+# 📄 FÁBRICA DE PDFs
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -360,7 +357,6 @@ if not st.session_state.carrinho.empty:
     st.sidebar.divider()
     st.sidebar.subheader("⚙️ Gerenciar Carrinho")
     
-    # Exterminador de Fantasmas: Remove as linhas em branco da lista do Selectbox
     lista_itens_carrinho = [i for i in st.session_state.carrinho['produto_mapa'].unique() if i.strip()]
     item_remover = st.sidebar.selectbox("Excluir item do carrinho:", [""] + lista_itens_carrinho)
     
@@ -446,7 +442,8 @@ except Exception:
 # ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
-aba_selecionada = st.radio("Escolha o Módulo:", ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed")
+# 🛡️ CADEADO DE ABA: A key "aba_ativa" força o Streamlit a lembrar a aba mesmo após o st.rerun()
+aba_selecionada = st.radio("Escolha o Módulo:", ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed", key="aba_ativa")
 
 # ==========================================
 # TELA 0: CONFIGURAÇÕES DA ENTIDADE
@@ -573,7 +570,8 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             except: cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Pauta Consolidada importada! Vá para a Aba 2 (Pesquisa).")
+                    st.session_state['aba_ativa'] = "📊 2. Painel Central de Cotação (Pesquisa)"
+                    st.success("✅ Pauta Consolidada importada! Redirecionando..."); time.sleep(1); st.rerun()
                     
             except Exception as e:
                 st.error(f"Erro ao processar o arquivo: {e}")
@@ -665,12 +663,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         if c_imp2.button("📥 Carregar Pauta e Carrinho", use_container_width=True):
             st.session_state['solic_importada'] = id_solic_imp
             
-            # --- CARREGAMENTO AUTO-SAVE (COM EXTERMINADOR DE FANTASMAS) ---
             df_cart = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={id_solic_imp}", conn)
             if not df_cart.empty and df_cart['dados_json'].iloc[0]:
                 try: 
                     df_load = pd.read_json(StringIO(df_cart['dados_json'].iloc[0]), orient='records')
-                    # Elimina qualquer item vazio ou corrompido que tenha sido salvo antes
                     df_load.dropna(subset=['produto_mapa', 'valor_unitario'], inplace=True) 
                     df_load = df_load[df_load['produto_mapa'].str.strip() != ""]
                     if not df_load.empty: st.session_state.carrinho = df_load
@@ -708,25 +704,19 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # 🛡️ MEMÓRIA SOMBRA: Guarda o nome oficial independentemente da tela piscar
+                    # 🛡️ MEMÓRIA SOMBRA
                     st.session_state['mem_nome_relatorio'] = item_selecionado
                     st.session_state['mem_qtd_relatorio'] = qtd_extraida
                     
                     st.session_state['p1_busca_form'] = palavras[0] if len(palavras) > 0 else ""
                     st.session_state['p2_busca_form'] = palavras[1] if len(palavras) > 1 else ""
                     st.session_state['p3_busca_form'] = ""
-                    st.session_state['input_nome_relatorio_form'] = item_selecionado
-                    st.session_state['input_qtd_relatorio_form'] = qtd_extraida
-                    st.session_state['input_qtd_internet_form'] = qtd_extraida
                 else:
                     st.session_state['mem_nome_relatorio'] = "ITEM DA COTAÇÃO"
                     st.session_state['mem_qtd_relatorio'] = 1.0
                     st.session_state['p1_busca_form'] = ""
                     st.session_state['p2_busca_form'] = ""
                     st.session_state['p3_busca_form'] = ""
-                    st.session_state['input_nome_relatorio_form'] = "ITEM DA COTAÇÃO"
-                    st.session_state['input_qtd_relatorio_form'] = 1.0
-                    st.session_state['input_qtd_internet_form'] = 1.0
                 
             if item_selecionado:
                 st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['mem_qtd_relatorio']}**")
@@ -808,7 +798,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.error("❌ Nada encontrado em nenhum estado do Brasil.")
 
     if submit:
-        st.session_state['search_id'] = str(time.time()) # Evita Duplicate ID na tabela
+        st.session_state['search_id'] = str(time.time()) 
         conn = conectar_banco()
         query = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0"
         
@@ -862,7 +852,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 termo_completo = f"{p1} {p2} {p3}".strip()
                 termo_varejo = remover_acentos(termo_completo) if termo_completo else "ITEM"
                 acionar_varejador(termo_varejo, df)
-
         except Exception as e:
             st.error(f"Erro no banco: {e}")
         conn.close()
@@ -887,17 +876,12 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             }
         )
         
-        # 🛡️ RESTAURAÇÃO DA MEMÓRIA SOMBRA (Evita o Bug do Carrinho em Branco)
-        if 'input_nome_relatorio_form' not in st.session_state:
-            st.session_state['input_nome_relatorio_form'] = st.session_state['mem_nome_relatorio']
-        if 'input_qtd_relatorio_form' not in st.session_state:
-            st.session_state['input_qtd_relatorio_form'] = st.session_state['mem_qtd_relatorio']
-            
+        # 🛡️ BLINDAGEM DA MEMÓRIA SOMBRA: Usamos `value=` em vez de `key=` para proteger contra apagões de formulário
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", key="input_nome_relatorio_form")
-        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="input_qtd_relatorio_form")
+        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['mem_nome_relatorio'])
+        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['mem_qtd_relatorio']), step=1.0)
         
-        # Atualiza a memória sombra caso o usuário altere o texto manualmente
+        # Atualiza a sombra constantemente com o que você digita
         st.session_state['mem_nome_relatorio'] = nome_grupo
         st.session_state['mem_qtd_relatorio'] = qtd_grupo
         
@@ -911,10 +895,11 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     selecionados['produto_mapa'] = remover_acentos(nome_grupo).strip()
                     selecionados['quantidade'] = float(qtd_grupo) 
                     
-                    # Anti-Clone: Gera ID único na hora de salvar para não atropelar itens anteriores
                     selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
                     st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
                     salvar_carrinho_no_banco()
+                    st.success("✅ Cotações adicionadas com sucesso!")
+                    time.sleep(1)
                     st.rerun()
                 else:
                     st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
@@ -928,7 +913,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema. A Página 1 do PDF mostrará apenas 1 linha com o Valor Médio daquele grupo, e a Página 2 mostrará as empresas separadas detalhadamente.")
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
         
-        # Destaca visualmente a planilha
         st.dataframe(
             df_raiox, 
             use_container_width=True, 
@@ -951,7 +935,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1])
         desc_int = c_int1.text_input("Descrição do Item da Web")
         unid_int = c_int2.text_input("Unidade")
-        qtd_int = c_int5.number_input("Quantidade", step=1.0, key="input_qtd_internet_form") 
+        qtd_int = c_int5.number_input("Quantidade", step=1.0) 
         
         c_int3, c_int4 = st.columns([2, 1])
         forn_int = c_int3.text_input("Nome da Loja Varejista e CNPJ")
