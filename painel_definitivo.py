@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v7.1 Estabilidade Gold e Navegação Segura</p>
+    <p class="portal-subtitle">Painel Administrativo | v7.2 Estabilidade Máxima e Memória Blindada</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,13 +58,13 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
-# CHAVES BLINDADAS PARA EVITAR O APAGÃO DO FORMULÁRIO
+# CHAVES BLINDADAS PARA EVITAR O APAGÃO DOS CAMPOS E ERROS DE ABA
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
-    'nome_relatorio_input': "", 'qtd_relatorio_input': 1.0,
+    'nome_relatorio_input': "ITEM DA COTAÇÃO", 'qtd_relatorio_input': 1.0,
     'input_qtd_internet_form': 1.0,
     'ultimo_item_selecionado': "", 'search_id': "default",
-    'menu_option': "⚙️ 0. Configurações" # Chave segura de navegação de abas
+    'menu_option': "⚙️ 0. Configurações" 
 }
 for key, value in keys_to_init.items():
     if key not in st.session_state: st.session_state[key] = value
@@ -398,16 +398,14 @@ except Exception:
     pass
 
 # ==========================================
-# 🗂️ MÓDULOS DE NAVEGAÇÃO (CADEADO DE ABA SEGURO)
+# 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
 opcoes_menu = ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)", "🗂️ 3. Histórico e Relatórios"]
 try: idx_aba = opcoes_menu.index(st.session_state['menu_option'])
 except ValueError: idx_aba = 0
 
-# O Radio não usa mais key="aba_ativa" para não dar o erro StreamlitAPIException
+# Rádio atualiza o estado e recarrega de forma limpa, evitando a tela vermelha
 aba_selecionada = st.radio("Escolha o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
-
-# Atualiza a memória de navegação se o usuário clicar
 if aba_selecionada != st.session_state['menu_option']:
     st.session_state['menu_option'] = aba_selecionada
     st.rerun()
@@ -662,7 +660,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos)
             
-            # GATILHO: Somente atualiza as caixas e a Memória Sombra se o item escolhido mudar!
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
@@ -672,7 +669,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # Salva nas chaves vinculadas ao text_input!
                     st.session_state['nome_relatorio_input'] = item_selecionado
                     st.session_state['qtd_relatorio_input'] = qtd_extraida
                     
@@ -680,7 +676,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.session_state['p2_busca_form'] = palavras[1] if len(palavras) > 1 else ""
                     st.session_state['p3_busca_form'] = ""
                 else:
-                    st.session_state['nome_relatorio_input'] = ""
+                    st.session_state['nome_relatorio_input'] = "ITEM DA COTAÇÃO"
                     st.session_state['qtd_relatorio_input'] = 1.0
                     st.session_state['p1_busca_form'] = ""
                     st.session_state['p2_busca_form'] = ""
@@ -847,19 +843,18 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         )
         
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        # NOME DO RELATORIO BLINDADO PELO STATE KEY
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", key="nome_relatorio_input")
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="qtd_relatorio_input")
         
         if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
-            if not nome_grupo.strip():
+            if not st.session_state['nome_relatorio_input'].strip():
                 st.error("🚨 ERRO: O Nome do Relatório não pode ficar em branco! Preencha a caixa acima antes de adicionar.")
             else:
                 selecionados = df_editado[df_editado['Selecionar'] == True].copy()
                 selecionados = selecionados.drop(columns=['Selecionar'])
                 if not selecionados.empty:
-                    selecionados['produto_mapa'] = remover_acentos(nome_grupo).strip()
-                    selecionados['quantidade'] = float(qtd_grupo) 
+                    selecionados['produto_mapa'] = remover_acentos(st.session_state['nome_relatorio_input']).strip()
+                    selecionados['quantidade'] = float(st.session_state['qtd_relatorio_input'])
                     
                     selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
                     st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
@@ -870,13 +865,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 else:
                     st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
                 
-    # ==========================================
-    # 🔍 PLANILHA DE RAIO-X
-    # ==========================================
     st.divider()
     st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
     if not st.session_state.carrinho.empty:
-        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema. A Página 1 do PDF mostrará apenas 1 linha com o Valor Médio daquele grupo, e a Página 2 mostrará as empresas separadas detalhadamente.")
+        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema na hora de gerar os PDFs.")
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
         
         st.dataframe(
@@ -899,7 +891,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1])
         desc_int = c_int1.text_input("Descrição do Item da Web")
         unid_int = c_int2.text_input("Unidade")
-        qtd_int = c_int5.number_input("Quantidade", step=1.0) 
+        qtd_int = c_int5.number_input("Quantidade", step=1.0, key="input_qtd_internet_form") 
         
         c_int3, c_int4 = st.columns([2, 1])
         forn_int = c_int3.text_input("Nome da Loja Varejista e CNPJ")
@@ -940,7 +932,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             
             st.session_state['solic_importada'] = None
             st.session_state.carrinho = pd.DataFrame()
-            st.session_state['menu_option'] = "🗂️ 3. Histórico e Relatórios" # Direcionamento Sem Erro!
+            st.session_state['menu_option'] = "🗂️ 3. Histórico e Relatórios"
             
             st.success("✅ Cotação Finalizada com Sucesso! Redirecionando para o Histórico...")
             time.sleep(1.5)
@@ -973,7 +965,7 @@ elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
                     conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],))
                     conn.commit()
                     st.session_state['solic_importada'] = row['id']
-                    st.session_state['menu_option'] = "📊 2. Painel Central de Cotação (Pesquisa)" # Direcionamento Sem Erro!
+                    st.session_state['menu_option'] = "📊 2. Painel Central de Cotação (Pesquisa)" 
                     st.rerun()
                     
                 if c_hist2.button("📄 Carregar Relatórios Oficiais em PDF", key=f"pdf_{row['id']}"):
