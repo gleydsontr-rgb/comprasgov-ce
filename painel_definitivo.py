@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v5.0 Auto-Save de Cotações e Capa Inteligente</p>
+    <p class="portal-subtitle">Painel Administrativo | v5.2 Visão Raio-X de Cotações</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,7 +58,6 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
-# Estados de sincronização para as caixas de texto
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
     'input_nome_relatorio_form': "ITEM DA COTAÇÃO",
@@ -77,7 +76,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS (COM TABELA DE SALVAMENTO)
+# 📡 BANCO DE DADOS 
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
@@ -98,7 +97,6 @@ def conectar_banco():
         valor_unitario REAL, municipio TEXT, estado TEXT, credor TEXT, data_assinatura TEXT, link_pncp TEXT, origem TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS cotacoes_salvas (id_solicitacao INTEGER PRIMARY KEY, dados_json TEXT)''')
     
-    # Atualiza bancos antigos com as novas colunas da Capa
     cursor.execute("PRAGMA table_info(solicitacoes)")
     cols = [col[1] for col in cursor.fetchall()]
     if 'objeto' not in cols:
@@ -124,7 +122,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (CAPA INTELIGENTE E MULTI-ITEM)
+# 📄 FÁBRICA DE PDFs 
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, orgao, processo, tipo_relatorio):
@@ -189,7 +187,7 @@ def gerar_pdf_mapa(df_carrinho, orgao, processo, objeto):
         pdf.cell(10, 6, str(i), 1, 0, 'C')
         pdf.cell(90, 6, tratar_texto(str(nome)[:55]), 1, 0, 'L')
         pdf.cell(15, 6, tratar_texto(unid), 1, 0, 'C')
-        pdf.cell(15, 6, str(int(qtd)) if qtd.is_integer() else f"{qtd:.2f}", 1, 0, 'C')
+        pdf.cell(15, 6, str(int(qtd)) if float(qtd).is_integer() else f"{qtd:.2f}", 1, 0, 'C')
         pdf.cell(30, 6, f"R$ {media:,.2f}", 1, 0, 'R')
         pdf.cell(30, 6, f"R$ {v_total:,.2f}", 1, 1, 'R')
         
@@ -201,7 +199,7 @@ def gerar_pdf_mapa(df_carrinho, orgao, processo, objeto):
     for nome, gp in grupos:
         unid = gp['unid_medida'].iloc[0]; qtd = gp['quantidade'].iloc[0]
         pdf.set_font('Arial', 'B', 8)
-        qtd_str = f"{int(qtd)}" if qtd.is_integer() else f"{qtd:.2f}"
+        qtd_str = f"{int(qtd)}" if float(qtd).is_integer() else f"{qtd:.2f}"
         pdf.multi_cell(0, 5, tratar_texto(f"ITEM: {nome} - UNID: {unid} - QTD TOTAL: {qtd_str}")); pdf.ln(1)
         
         pdf.set_font('Arial', 'B', 7)
@@ -211,7 +209,7 @@ def gerar_pdf_mapa(df_carrinho, orgao, processo, objeto):
         pdf.set_font('Arial', '', 7)
         for idx, (_, row) in enumerate(gp.iterrows(), 1):
             coleta = "LINK DA WEB" if row.get('origem') == 'INTERNET' else "CESTA PREÇOS GOVERNO"
-            v_unit = row['valor_unitario']; v_tot = v_unit * qtd
+            v_unit = row['valor_unitario']; v_tot = v_unit * float(qtd)
             pdf.cell(10, 5, str(idx), 1, 0, 'C')
             pdf.cell(55, 5, tratar_texto(coleta), 1, 0, 'C')
             pdf.cell(85, 5, tratar_texto(row['credor'][:48]), 1, 0, 'L')
@@ -225,9 +223,9 @@ def gerar_pdf_detalhado_pncp(df_carrinho, orgao, processo, objeto):
     pdf.add_page(); pdf.set_font('Arial', 'B', 10); pdf.multi_cell(0, 6, tratar_texto(f"OBJETO: {objeto}")); pdf.ln(5)
     df_pncp = df_carrinho[df_carrinho['origem'] != 'INTERNET']
     if df_pncp.empty:
-        pdf.set_font('Arial', '', 10); pdf.cell(0, 10, tratar_texto("Nenhuma cotação do banco público."), 0, 1, 'C')
+        pdf.set_font('Arial', '', 10); pdf.cell(0, 10, tratar_texto("Nenhuma cotação do banco público adicionada."), 0, 1, 'C')
         return pdf.output(dest='S').encode('latin-1')
-    for _, row in df_pncp.iterrows():
+    for index, row in df_pncp.iterrows():
         pdf.set_font('Arial', 'B', 9); pdf.set_fill_color(230, 230, 230)
         pdf.multi_cell(0, 6, tratar_texto(f"ITEM: {row['descricao_item']} (Unid: {row['unid_medida']})"), 1, 'L', fill=True)
         pdf.set_font('Arial', '', 8)
@@ -240,9 +238,9 @@ def gerar_pdf_detalhado_links(df_carrinho, orgao, processo, objeto):
     pdf.add_page(); pdf.set_font('Arial', 'B', 10); pdf.multi_cell(0, 6, tratar_texto(f"OBJETO: {objeto}")); pdf.ln(5)
     df_int = df_carrinho[df_carrinho['origem'] == 'INTERNET']
     if df_int.empty:
-        pdf.set_font('Arial', '', 10); pdf.cell(0, 10, tratar_texto("Nenhuma cotação da internet."), 0, 1, 'C')
+        pdf.set_font('Arial', '', 10); pdf.cell(0, 10, tratar_texto("Nenhuma cotação da internet adicionada."), 0, 1, 'C')
         return pdf.output(dest='S').encode('latin-1')
-    for _, row in df_int.iterrows():
+    for index, row in df_int.iterrows():
         pdf.set_font('Arial', 'B', 9); pdf.set_fill_color(230, 230, 230)
         pdf.multi_cell(0, 6, tratar_texto(f"ITEM: {row['descricao_item']} (Unid: {row['unid_medida']})"), 1, 'L', fill=True)
         pdf.set_font('Arial', '', 8)
@@ -258,11 +256,10 @@ st.sidebar.title("🛒 Cotações Salvas")
 if not st.session_state.carrinho.empty:
     resumo = st.session_state.carrinho.groupby('produto_mapa').agg({'valor_unitario': 'count', 'quantidade': 'max'})
     st.sidebar.success(f"**{len(resumo)}** produtos no carrinho (Salvo Auto).")
-    st.sidebar.dataframe(st.session_state.carrinho[['produto_mapa', 'valor_unitario', 'quantidade']], hide_index=True)
     
     st.sidebar.divider()
     st.sidebar.subheader("⚙️ Gerenciar Carrinho")
-    item_remover = st.sidebar.selectbox("Excluir item:", [""] + st.session_state.carrinho['produto_mapa'].unique().tolist())
+    item_remover = st.sidebar.selectbox("Excluir item do carrinho:", [""] + st.session_state.carrinho['produto_mapa'].unique().tolist())
     if st.sidebar.button("❌ Remover Item"):
         if item_remover:
             st.session_state.carrinho = st.session_state.carrinho[st.session_state.carrinho['produto_mapa'] != item_remover]
@@ -278,7 +275,6 @@ if not st.session_state.carrinho.empty:
     st.sidebar.divider()
     st.sidebar.subheader("📄 Gerar Processo Oficial")
     
-    # Puxa Objeto e Secretarias do banco para auto-preencher
     obj_default = "FORNECIMENTO DE GÊNEROS ALIMENTÍCIOS"
     sec_default = "SECRETARIA MUNICIPAL DE EDUCAÇÃO\nSECRETARIA MUNICIPAL DE SAÚDE"
     if 'solic_importada' in st.session_state:
@@ -292,7 +288,7 @@ if not st.session_state.carrinho.empty:
         conn.close()
 
     with st.sidebar.form("form_pdf"):
-        nome_orgao = st.text_input("Órgão Comprador", value="PREFEITURA MUNICIPAL")
+        nome_orgao = st.text_input("Órgão Comprador", value="PREFEITURA MUNICIPAL DE ASSARÉ")
         numero_proc = st.text_input("Nº do Processo", value="2026.03.23-0001")
         desc_objeto = st.text_area("Descrição do Objeto (Capa)", value=obj_default)
         sec_solic_rel = st.text_area("Secretarias Solicitantes (Capa)", value=sec_default)
@@ -398,7 +394,6 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 
                 st.success("✅ Planilha lida com sucesso! Configure a Cotação abaixo:")
                 
-                # Novos campos da Capa na Importação
                 c_capa1, c_capa2 = st.columns(2)
                 nome_solic_auto = c_capa1.text_input("Nome do Arquivo Interno:", value=f"PAUTA CONSOLIDADA - {arquivo_pauta.name.split('.')[0]}")
                 desc_obj = c_capa1.text_area("Objeto da Compra (Para a Capa):", value="AQUISIÇÃO DE GÊNEROS ALIMENTÍCIOS DIVERSOS")
@@ -443,6 +438,75 @@ if aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 st.error(f"Erro ao processar o arquivo: {e}")
 
     st.divider()
+
+    with st.expander("✏️ OPÇÃO MANUAL: Cadastrar Solicitação Secretaria por Secretaria", expanded=False):
+        c_man1, c_man2 = st.columns(2)
+        nome_sec = c_man1.text_input("Nome da Secretaria / Arquivo", key="input_nome_sec_man")
+        obj_man = c_man1.text_area("Objeto da Compra (Capa):", value="AQUISIÇÃO DE MATERIAIS")
+        sec_man = c_man2.text_area("Secretarias Solicitantes (Capa):", value="SECRETARIA GERAL")
+        
+        if st.button("Criar Nova Solicitação Manual", key="btn_nova_solic_man"):
+            if nome_sec:
+                num_gerado = f"{datetime.now().strftime('%Y.%m%d%H%M')}"
+                conn = conectar_banco()
+                conn.execute("INSERT INTO solicitacoes (numero_solic, secretaria, data_solic, status, objeto, secretarias) VALUES (?, ?, ?, ?, ?, ?)", 
+                             (num_gerado, nome_sec.upper(), datetime.now().strftime('%d/%m/%Y'), 'ABERTA', obj_man.upper(), sec_man.upper()))
+                conn.commit()
+                conn.close()
+                st.success(f"Solicitação manual criada!")
+                st.rerun()
+
+    conn = conectar_banco()
+    try: df_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
+    except: df_solic = pd.DataFrame() 
+    
+    if not df_solic.empty:
+        st.subheader("📋 VISUALIZAR E ADICIONAR ITENS")
+        solic_selecionada = st.selectbox("Selecione a Solicitação no Banco", df_solic['id'].astype(str) + " - " + df_solic['secretaria'], key="sel_solic_banco")
+        id_solic = int(solic_selecionada.split(" - ")[0])
+        
+        c_lote, c_item = st.columns(2)
+        with c_lote:
+            with st.form("form_lote", clear_on_submit=True):
+                nome_lote = st.text_input("Nome do Lote")
+                if st.form_submit_button("Criar Lote Manual"):
+                    if nome_lote:
+                        conn.execute("INSERT INTO lotes_solicitacao (id_solicitacao, nome_lote, desc_lote) VALUES (?, ?, ?)", (id_solic, nome_lote.upper(), ""))
+                        conn.commit()
+                        st.rerun()
+        
+        df_lotes = pd.read_sql_query(f"SELECT * FROM lotes_solicitacao WHERE id_solicitacao={id_solic}", conn)
+        with c_item:
+            if not df_lotes.empty:
+                with st.form("form_item", clear_on_submit=True):
+                    lote_selec = st.selectbox("Lote", df_lotes['id'].astype(str) + " - " + df_lotes['nome_lote'])
+                    id_lote = int(lote_selec.split(" - ")[0])
+                    desc_item = st.text_area("Descrição")
+                    ci_1, ci_2 = st.columns(2)
+                    unid_item = ci_1.text_input("Unid.")
+                    qtd_item = ci_2.number_input("Qtd", min_value=1.0)
+                    if st.form_submit_button("Inserir Item Manual"):
+                        if desc_item and unid_item:
+                            try:
+                                conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
+                            except sqlite3.OperationalError:
+                                conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper()))
+                            conn.commit()
+                            st.rerun()
+                            
+        try:
+            df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        except Exception:
+            df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+            
+        df_itens = pd.DataFrame()
+        if not df_bruto.empty:
+            df_itens['Lote'] = df_bruto['Lote']
+            df_itens['Produto'] = df_bruto['Produto']
+            df_itens['Unid'] = df_bruto['Unid']
+            df_itens['Qtd'] = df_bruto['quantidade'] if 'quantidade' in df_bruto.columns else 1.0
+            st.dataframe(df_itens, use_container_width=True, hide_index=True)
+    conn.close()
 
 # ==========================================
 # TELA 2: COTAÇÃO E PESQUISA
@@ -544,7 +608,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (BUSCA NACIONAL APRIMORADA)
+    # VAREJADOR IA 
     # ==========================================
     def acionar_varejador(termo_busca, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
@@ -688,6 +752,30 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.rerun()
             else:
                 st.warning("Selecione pelo menos um item.")
+                
+    # ==========================================
+    # 🔍 PLANILHA DE RAIO-X (O VISUALIZADOR DA CESTA)
+    # ==========================================
+    st.divider()
+    st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
+    if not st.session_state.carrinho.empty:
+        st.info("💡 **COMO FUNCIONA O MAPA DE PREÇOS:** Você deve coletar 3 cotações de empresas diferentes para formar **1 Média**. Na Capa e no Resumo do PDF, o sistema junta essas cotações e mostra apenas **1 linha** (o valor médio final). O detalhamento das empresas fica na **Página 2** do PDF. Revise a sua cesta abaixo e exclua no menu lateral se puxou algo indesejado.")
+        
+        df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
+        st.dataframe(
+            df_raiox, 
+            use_container_width=True, 
+            hide_index=True,
+            column_config={
+                "produto_mapa": "Grupo no PDF (Será agrupado)",
+                "descricao_item": "Descrição Bruta da Nota Fiscal",
+                "credor": "Fornecedor",
+                "valor_unitario": st.column_config.NumberColumn("Valor Final (R$)", format="R$ %.2f"),
+                "origem": "Fonte da Cotação"
+            }
+        )
+    else:
+        st.warning("A sua cesta de cotações está vazia. Pesquise e adicione itens acima.")
 
     st.divider()
     st.subheader("3. Adicionar Cotação da Internet (Manual)")
