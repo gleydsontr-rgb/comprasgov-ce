@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v6.3 Memória de Abas e Bloqueio de Apagão</p>
+    <p class="portal-subtitle">Painel Administrativo | v6.4 Estabilidade Máxima e Memória de Abas</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -442,7 +442,7 @@ except Exception:
 # ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
-# 🛡️ CADEADO DE ABA: A key "aba_ativa" força o Streamlit a lembrar a aba mesmo após o st.rerun()
+# CADEADO DE ABA: Mantém o usuário na aba correta ao excluir itens do carrinho
 aba_selecionada = st.radio("Escolha o Módulo:", ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed", key="aba_ativa")
 
 # ==========================================
@@ -570,8 +570,8 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             except: cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit(); conn.close()
-                    st.session_state['aba_ativa'] = "📊 2. Painel Central de Cotação (Pesquisa)"
-                    st.success("✅ Pauta Consolidada importada! Redirecionando..."); time.sleep(1); st.rerun()
+                    # REMOVIDO o redirecionamento automático que causava a tela vermelha!
+                    st.success("✅ Pauta Consolidada importada com sucesso! Clique na Aba 2 (Pesquisa) para continuar.")
                     
             except Exception as e:
                 st.error(f"Erro ao processar o arquivo: {e}")
@@ -704,7 +704,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # 🛡️ MEMÓRIA SOMBRA
+                    # MEMÓRIA SOMBRA
                     st.session_state['mem_nome_relatorio'] = item_selecionado
                     st.session_state['mem_qtd_relatorio'] = qtd_extraida
                     
@@ -717,6 +717,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.session_state['p1_busca_form'] = ""
                     st.session_state['p2_busca_form'] = ""
                     st.session_state['p3_busca_form'] = ""
+                st.rerun() 
                 
             if item_selecionado:
                 st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['mem_qtd_relatorio']}**")
@@ -852,6 +853,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 termo_completo = f"{p1} {p2} {p3}".strip()
                 termo_varejo = remover_acentos(termo_completo) if termo_completo else "ITEM"
                 acionar_varejador(termo_varejo, df)
+
         except Exception as e:
             st.error(f"Erro no banco: {e}")
         conn.close()
@@ -876,12 +878,11 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             }
         )
         
-        # 🛡️ BLINDAGEM DA MEMÓRIA SOMBRA: Usamos `value=` em vez de `key=` para proteger contra apagões de formulário
+        # 🛡️ BLINDAGEM DA MEMÓRIA SOMBRA: Desvinculado do reset de formulário
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['mem_nome_relatorio'])
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['mem_qtd_relatorio']), step=1.0)
         
-        # Atualiza a sombra constantemente com o que você digita
         st.session_state['mem_nome_relatorio'] = nome_grupo
         st.session_state['mem_qtd_relatorio'] = qtd_grupo
         
