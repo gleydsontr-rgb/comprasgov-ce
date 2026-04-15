@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v7.0 Fluxo de Finalização e Histórico</p>
+    <p class="portal-subtitle">Painel Administrativo | v7.1 Estabilidade Gold e Navegação Segura</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,10 +58,13 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
+# CHAVES BLINDADAS PARA EVITAR O APAGÃO DO FORMULÁRIO
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
+    'nome_relatorio_input': "", 'qtd_relatorio_input': 1.0,
+    'input_qtd_internet_form': 1.0,
     'ultimo_item_selecionado': "", 'search_id': "default",
-    'mem_nome_relatorio': "ITEM DA COTAÇÃO", 'mem_qtd_relatorio': 1.0 
+    'menu_option': "⚙️ 0. Configurações" # Chave segura de navegação de abas
 }
 for key, value in keys_to_init.items():
     if key not in st.session_state: st.session_state[key] = value
@@ -395,11 +398,19 @@ except Exception:
     pass
 
 # ==========================================
-# 🗂️ MÓDULOS DE NAVEGAÇÃO
+# 🗂️ MÓDULOS DE NAVEGAÇÃO (CADEADO DE ABA SEGURO)
 # ==========================================
-aba_selecionada = st.radio("Escolha o Módulo:", 
-    ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)", "🗂️ 3. Histórico e Relatórios"], 
-    horizontal=True, label_visibility="collapsed", key="aba_ativa")
+opcoes_menu = ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)", "🗂️ 3. Histórico e Relatórios"]
+try: idx_aba = opcoes_menu.index(st.session_state['menu_option'])
+except ValueError: idx_aba = 0
+
+# O Radio não usa mais key="aba_ativa" para não dar o erro StreamlitAPIException
+aba_selecionada = st.radio("Escolha o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
+
+# Atualiza a memória de navegação se o usuário clicar
+if aba_selecionada != st.session_state['menu_option']:
+    st.session_state['menu_option'] = aba_selecionada
+    st.rerun()
 
 # ==========================================
 # TELA 0: CONFIGURAÇÕES DA ENTIDADE
@@ -444,7 +455,7 @@ if aba_selecionada == "⚙️ 0. Configurações":
 elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     
     c_z1, c_z2 = st.columns([4, 1])
-    if c_z2.button("⚠️ Zerar Planejamento (Atenção)", key="btn_zerar_banco"):
+    if c_z2.button("⚠️ Zerar Planejamento (Atenção)"):
         conn = conectar_banco()
         for t in ['solicitacoes', 'lotes_solicitacao', 'itens_solicitacao', 'cotacoes_salvas']:
             conn.execute(f"DROP TABLE IF EXISTS {t}")
@@ -457,7 +468,7 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
 
     st.markdown("### 📥 Importação Automática de Pautas Consolidadas")
     with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens", expanded=False):
-        arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta", type=["csv", "xlsx"], key="file_up_pauta")
+        arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta", type=["csv", "xlsx"])
         
         if arquivo_pauta:
             try:
@@ -535,11 +546,11 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
 
     with st.expander("✏️ OPÇÃO MANUAL: Cadastrar Solicitação Secretaria por Secretaria", expanded=False):
         c_man1, c_man2 = st.columns(2)
-        nome_sec = c_man1.text_input("Nome da Secretaria / Arquivo", key="input_nome_sec_man")
+        nome_sec = c_man1.text_input("Nome da Secretaria / Arquivo")
         obj_man = c_man1.text_area("Objeto da Compra (Capa):", value="AQUISIÇÃO DE MATERIAIS")
         sec_man = c_man2.text_area("Secretarias Solicitantes (Capa):", value="SECRETARIA GERAL")
         
-        if st.button("Criar Nova Solicitação Manual", key="btn_nova_solic_man"):
+        if st.button("Criar Nova Solicitação Manual"):
             if nome_sec:
                 num_gerado = f"{datetime.now().strftime('%Y.%m%d%H%M')}"
                 conn = conectar_banco()
@@ -554,7 +565,7 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     
     if not df_solic.empty:
         st.subheader("📋 VISUALIZAR E ADICIONAR ITENS")
-        solic_selecionada = st.selectbox("Selecione a Solicitação no Banco", df_solic['id'].astype(str) + " - " + df_solic['secretaria'], key="sel_solic_banco")
+        solic_selecionada = st.selectbox("Selecione a Solicitação no Banco", df_solic['id'].astype(str) + " - " + df_solic['secretaria'])
         id_solic = int(solic_selecionada.split(" - ")[0])
         
         c_lote, c_item = st.columns(2)
@@ -608,7 +619,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     st.subheader("📥 1. Escolher Pauta e Carregar Cotação Salva")
     conn = conectar_banco()
     
-    # A Aba 2 só mostra Pautas que estão ABERTAS
     try: df_todas_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
     except: df_todas_solic = pd.DataFrame()
         
@@ -650,8 +660,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             st.dataframe(df_itens_imp, use_container_width=True, hide_index=True)
             
             lista_produtos = df_itens_imp['Produto'].tolist()
-            item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
+            item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos)
             
+            # GATILHO: Somente atualiza as caixas e a Memória Sombra se o item escolhido mudar!
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
@@ -661,24 +672,25 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # MEMÓRIA SOMBRA
-                    st.session_state['mem_nome_relatorio'] = item_selecionado
-                    st.session_state['mem_qtd_relatorio'] = qtd_extraida
+                    # Salva nas chaves vinculadas ao text_input!
+                    st.session_state['nome_relatorio_input'] = item_selecionado
+                    st.session_state['qtd_relatorio_input'] = qtd_extraida
                     
                     st.session_state['p1_busca_form'] = palavras[0] if len(palavras) > 0 else ""
                     st.session_state['p2_busca_form'] = palavras[1] if len(palavras) > 1 else ""
                     st.session_state['p3_busca_form'] = ""
                 else:
-                    st.session_state['mem_nome_relatorio'] = "ITEM DA COTAÇÃO"
-                    st.session_state['mem_qtd_relatorio'] = 1.0
+                    st.session_state['nome_relatorio_input'] = ""
+                    st.session_state['qtd_relatorio_input'] = 1.0
                     st.session_state['p1_busca_form'] = ""
                     st.session_state['p2_busca_form'] = ""
                     st.session_state['p3_busca_form'] = ""
                 st.rerun() 
                 
             if item_selecionado:
-                st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['mem_qtd_relatorio']}**")
+                st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['qtd_relatorio_input']}**")
     
+    conn.close()
     st.divider()
 
     st.subheader("2. Buscar no Banco do Governo (PNCP)")
@@ -688,19 +700,19 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         p1 = c1.text_input("Palavra Principal", key="p1_busca_form")
         p2 = c2.text_input("Contendo também (1)", key="p2_busca_form")
         p3 = c3.text_input("Contendo também (2)", key="p3_busca_form")
-        p_excluir = c4.text_input("🚫 NÃO pode conter", key="pex_busca")
+        p_excluir = c4.text_input("🚫 NÃO pode conter")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
-        modo_busca = c5.selectbox("🧠 Inteligência da Busca", ["🔍 Ampla (Qualquer parte do texto)", "🎯 Inteligente (Focar no Nome do Produto)"], key="sel_int_busca")
-        dt_ini = c6.date_input("Data inicial", value=datetime(2025, 1, 1), format="DD/MM/YYYY", key="dt_ini_busca")
-        dt_fim = c7.date_input("Data final", format="DD/MM/YYYY", key="dt_fim_busca")
-        val_ini = c8.number_input("Valor mínimo (R$)", min_value=0.0, step=1.0, key="val_min_busca")
-        val_fim = c9.number_input("Valor máximo (R$)", min_value=0.0, step=1.0, key="val_max_busca")
+        modo_busca = c5.selectbox("🧠 Inteligência da Busca", ["🔍 Ampla (Qualquer parte do texto)", "🎯 Inteligente (Focar no Nome do Produto)"])
+        dt_ini = c6.date_input("Data inicial", value=datetime(2025, 1, 1), format="DD/MM/YYYY")
+        dt_fim = c7.date_input("Data final", format="DD/MM/YYYY")
+        val_ini = c8.number_input("Valor mínimo (R$)", min_value=0.0, step=1.0)
+        val_fim = c9.number_input("Valor máximo (R$)", min_value=0.0, step=1.0)
         
         c10, c11, c12 = st.columns([1.5, 3, 1.5])
-        uf = c10.selectbox("UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=1, key="sel_uf_busca")
-        relevancia = c11.text_input("Busca Exata (A frase exata precisa estar no texto)", key="input_exata_busca")
-        ordem = c12.selectbox("Ordenar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"], key="sel_ordem_busca")
+        uf = c10.selectbox("UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=1)
+        relevancia = c11.text_input("Busca Exata (A frase exata precisa estar no texto)")
+        ordem = c12.selectbox("Ordenar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
@@ -756,6 +768,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
+        conn = conectar_banco()
         query = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0"
         
         def aplicar_busca(texto, qry, operador="AND"):
@@ -811,6 +824,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
 
         except Exception as e:
             st.error(f"Erro no banco: {e}")
+        conn.close()
 
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
@@ -833,11 +847,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         )
         
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['mem_nome_relatorio'])
-        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['mem_qtd_relatorio']), step=1.0)
-        
-        st.session_state['mem_nome_relatorio'] = nome_grupo
-        st.session_state['mem_qtd_relatorio'] = qtd_grupo
+        # NOME DO RELATORIO BLINDADO PELO STATE KEY
+        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", key="nome_relatorio_input")
+        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="qtd_relatorio_input")
         
         if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
             if not nome_grupo.strip():
@@ -858,10 +870,13 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 else:
                     st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
                 
+    # ==========================================
+    # 🔍 PLANILHA DE RAIO-X
+    # ==========================================
     st.divider()
     st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
     if not st.session_state.carrinho.empty:
-        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema na hora de gerar os PDFs.")
+        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema. A Página 1 do PDF mostrará apenas 1 linha com o Valor Médio daquele grupo, e a Página 2 mostrará as empresas separadas detalhadamente.")
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
         
         st.dataframe(
@@ -918,33 +933,31 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         if 'solic_importada' in st.session_state and st.session_state['solic_importada'] is not None:
             id_imp = st.session_state['solic_importada']
             
+            conn = conectar_banco()
             conn.execute("UPDATE solicitacoes SET status='FINALIZADA', data_solic=? WHERE id=?", (datetime.now().strftime('%d/%m/%Y %H:%M'), id_imp))
             conn.commit()
+            conn.close()
             
             st.session_state['solic_importada'] = None
             st.session_state.carrinho = pd.DataFrame()
-            st.session_state['aba_ativa'] = "🗂️ 3. Histórico e Relatórios"
+            st.session_state['menu_option'] = "🗂️ 3. Histórico e Relatórios" # Direcionamento Sem Erro!
             
             st.success("✅ Cotação Finalizada com Sucesso! Redirecionando para o Histórico...")
             time.sleep(1.5)
             st.rerun()
         else:
             st.error("Nenhuma pauta foi carregada para ser finalizada.")
-            
-    conn.close()
 
 # ==========================================
-# TELA 3: HISTÓRICO E RELATÓRIOS (NOVO)
+# TELA 3: HISTÓRICO E RELATÓRIOS
 # ==========================================
 elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
     st.subheader("🗂️ Histórico de Cotações Finalizadas")
     st.markdown("Aqui ficam armazenadas as suas cotações concluídas. Você pode baixar os Relatórios em PDF ou reabrir uma cotação para alterar itens.")
     
     conn = conectar_banco()
-    try:
-        df_hist = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='FINALIZADA' ORDER BY id DESC", conn)
-    except:
-        df_hist = pd.DataFrame()
+    try: df_hist = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='FINALIZADA' ORDER BY id DESC", conn)
+    except: df_hist = pd.DataFrame()
         
     if df_hist.empty:
         st.info("Nenhuma cotação finalizada ainda. Suas cotações finalizadas na Aba 2 aparecerão aqui.")
@@ -956,15 +969,13 @@ elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
                 
                 c_hist1, c_hist2 = st.columns(2)
                 
-                # REABRIR PARA EDIÇÃO
                 if c_hist1.button("✏️ Reabrir para Edição (Alterar/Excluir Itens)", key=f"edit_{row['id']}"):
                     conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],))
                     conn.commit()
                     st.session_state['solic_importada'] = row['id']
-                    st.session_state['aba_ativa'] = "📊 2. Painel Central de Cotação (Pesquisa)"
+                    st.session_state['menu_option'] = "📊 2. Painel Central de Cotação (Pesquisa)" # Direcionamento Sem Erro!
                     st.rerun()
                     
-                # GERAR PDFS
                 if c_hist2.button("📄 Carregar Relatórios Oficiais em PDF", key=f"pdf_{row['id']}"):
                     df_cart_hist = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={row['id']}", conn)
                     if not df_cart_hist.empty and df_cart_hist['dados_json'].iloc[0]:
@@ -979,7 +990,6 @@ elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
                     else:
                         st.error("O carrinho desta cotação está vazio. Reabra para edição e adicione itens.")
                         
-                # MOSTRAR BOTÕES DE DOWNLOAD
                 if f'pdf_capa_{row["id"]}' in st.session_state:
                     st.success("✅ Relatórios Prontos para Download!")
                     dl1, dl2, dl3, dl4 = st.columns(4)
