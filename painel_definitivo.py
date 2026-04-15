@@ -30,8 +30,8 @@ st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="📊", 
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
-    header {visibility: hidden;}
     footer {visibility: hidden;}
+    /* O header não está mais oculto para não sumir com o botão do Menu Lateral! */
     .stApp { background-color: #f4f6f9; }
     .portal-header {
         background-color: #003366; 
@@ -39,7 +39,7 @@ st.markdown("""
         padding: 15px 20px;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         border-bottom: 5px solid #F2A900; 
-        margin-top: -80px; 
+        margin-top: -40px; 
         margin-bottom: 20px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
@@ -59,7 +59,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v4.5 Sincronização Direta de Keys</p>
+    <p class="portal-subtitle">Painel Administrativo | v4.8 Menu Lateral Restaurado + Radar do Robô</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -417,6 +417,28 @@ else:
     st.sidebar.info("Carrinho vazio. Pesquise e adicione cotações para gerar os relatórios oficiais.")
 
 # ==========================================
+# 🤖 RADAR DO ROBÔ (STATUS DO BANCO)
+# ==========================================
+st.sidebar.divider()
+st.sidebar.subheader("🤖 Status do Robô Fantasma")
+try:
+    conn_radar = conectar_banco()
+    df_radar = pd.read_sql_query("SELECT COUNT(*) as total, MAX(data_assinatura) as ultima_data FROM itens_compras", conn_radar)
+    total_itens = df_radar['total'].iloc[0]
+    ultima_data = df_radar['ultima_data'].iloc[0]
+    conn_radar.close()
+    
+    if total_itens > 0:
+        st.sidebar.write(f"📦 Itens no Cofre: **{total_itens:,}**".replace(',', '.'))
+        st.sidebar.write(f"🔄 Última Captura: **{ultima_data}**")
+        st.sidebar.success("✅ O Robô está operante.")
+    else:
+        st.sidebar.write("📦 Itens no Cofre: **0**")
+        st.sidebar.warning("⏳ Aguardando a primeira ronda do robô nesta madrugada.")
+except Exception:
+    st.sidebar.error("❌ Falha ao ler o radar.")
+
+# ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
 aba_selecionada = st.radio("Escolha o Módulo:", ["📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed")
@@ -646,7 +668,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
             
-            # --- O HACK DA SINCRONIZAÇÃO DIRETA NA MEMÓRIA ---
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
@@ -654,7 +675,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     texto_limpo = remover_acentos(item_selecionado).replace('-', ' ').replace(',', ' ').replace('.', ' ')
                     palavras = [p for p in texto_limpo.split() if p not in stopwords and len(p) > 1]
                     
-                    # Injeção DIRETA na Key da caixa de texto
                     st.session_state['p1_busca_form'] = palavras[0] if len(palavras) > 0 else ""
                     st.session_state['p2_busca_form'] = palavras[1] if len(palavras) > 1 else ""
                     st.session_state['p3_busca_form'] = ""
@@ -670,7 +690,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.session_state['input_nome_relatorio_form'] = "ITEM DA COTAÇÃO"
                     st.session_state['input_qtd_relatorio_form'] = 1.0
                     st.session_state['input_qtd_internet_form'] = 1.0
-                st.rerun() # Força a tela a piscar e puxar os dados injetados
+                st.rerun() 
                 
             if item_selecionado:
                 st.success(f"✔️ Item: **{item_selecionado}** | 📦 Quantidade Total: **{st.session_state['input_qtd_relatorio_form']}**")
@@ -683,7 +703,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
         
-        # Caixas cegas: Elas não têm o parâmetro 'value', elas obedecem unicamente à 'key' injetada acima
         p1 = c1.text_input("Palavra Principal", key="p1_busca_form")
         p2 = c2.text_input("Contendo também (1)", key="p2_busca_form")
         p3 = c3.text_input("Contendo também (2)", key="p3_busca_form")
@@ -703,9 +722,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
-    # ==========================================
-    # VAREJADOR IA (BLINDADO CONTRA ACENTOS DO GOVERNO)
-    # ==========================================
     def acionar_varejador(termo_busca, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(1.5) 
@@ -729,7 +745,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 lista_vars = []
                 for i, it in enumerate(itens_api[:100]):
                     titulo_bruto = str(it.get('title', '')).upper()
-                    # A MÁGICA: Limpa o acento do Governo ANTES de verificar
                     titulo_limpo = remover_acentos(titulo_bruto)
                     
                     if all(p in titulo_limpo for p in palavras):
@@ -810,7 +825,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 df['data_assinatura'] = pd.to_datetime(df['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                 st.session_state.df_resultados = df
             else:
-                # O VAREJADOR AGORA JUNTA AS 3 CAIXAS DE BUSCA
                 termo_completo = f"{p1} {p2} {p3}".strip()
                 termo_varejo = remover_acentos(termo_completo) if termo_completo else "ITEM"
                 acionar_varejador(termo_varejo, df)
