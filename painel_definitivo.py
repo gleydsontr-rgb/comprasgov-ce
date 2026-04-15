@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v6.4 Estabilidade Máxima e Memória de Abas</p>
+    <p class="portal-subtitle">Painel Administrativo | v7.0 Fluxo de Finalização e Histórico</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,7 +58,6 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
-# CHAVES BLINDADAS E MEMÓRIA SOMBRA
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
     'ultimo_item_selecionado': "", 'search_id': "default",
@@ -125,7 +124,7 @@ def get_config_entidade():
     return {'nome': 'PREFEITURA MUNICIPAL', 'cnpj': '', 'endereco': '', 'contato': '', 'logo': None}
 
 def salvar_carrinho_no_banco():
-    if 'solic_importada' in st.session_state:
+    if 'solic_importada' in st.session_state and st.session_state['solic_importada'] is not None:
         id_imp = st.session_state['solic_importada']
         conn = conectar_banco()
         if st.session_state.carrinho.empty:
@@ -346,9 +345,9 @@ def gerar_pdf_detalhado_links(df_carrinho, config, processo, objeto):
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 🛒 BARRA LATERAL (CARRINHO E PDFS)
+# 🛒 BARRA LATERAL (CARRINHO EM ANDAMENTO)
 # ==========================================
-st.sidebar.title("🛒 Cotações Salvas")
+st.sidebar.title("🛒 Cotações em Andamento")
 
 if not st.session_state.carrinho.empty:
     resumo = st.session_state.carrinho.groupby('produto_mapa').agg({'valor_unitario': 'count', 'quantidade': 'max'})
@@ -369,53 +368,9 @@ if not st.session_state.carrinho.empty:
     if st.sidebar.button("🗑️ Esvaziar Todo o Carrinho"):
         st.session_state.carrinho = pd.DataFrame()
         salvar_carrinho_no_banco()
-        if 'pdfs_prontos' in st.session_state: del st.session_state['pdfs_prontos']
         st.rerun()
-    
-    st.sidebar.divider()
-    st.sidebar.subheader("📄 Gerar Processo Oficial")
-    
-    obj_default = "FORNECIMENTO DE GÊNEROS ALIMENTÍCIOS"
-    sec_default = "SECRETARIA MUNICIPAL DE EDUCAÇÃO\nSECRETARIA MUNICIPAL DE SAÚDE"
-    if 'solic_importada' in st.session_state:
-        conn = conectar_banco()
-        try:
-            df_info = pd.read_sql_query(f"SELECT objeto, secretarias FROM solicitacoes WHERE id={st.session_state['solic_importada']}", conn)
-            if not df_info.empty:
-                if df_info['objeto'].iloc[0]: obj_default = df_info['objeto'].iloc[0]
-                if df_info['secretarias'].iloc[0]: sec_default = df_info['secretarias'].iloc[0]
-        except: pass
-        conn.close()
-
-    with st.sidebar.form("form_pdf"):
-        numero_proc = st.text_input("Nº do Processo", value="2026.03.23-0001")
-        desc_objeto = st.text_area("Descrição do Objeto (Capa)", value=obj_default)
-        sec_solic_rel = st.text_area("Secretarias Solicitantes (Capa)", value=sec_default)
-        preparar_doc = st.form_submit_button("🔨 Preparar Documentos")
-        
-    if preparar_doc:
-        config_entidade = get_config_entidade()
-        try:
-            lista_sec = sec_solic_rel.split('\n')
-            st.session_state['pdfs_prontos'] = {
-                'capa': gerar_pdf_capa(config_entidade, numero_proc, desc_objeto, lista_sec),
-                'mapa': gerar_pdf_mapa(st.session_state.carrinho, config_entidade, numero_proc, desc_objeto),
-                'pncp': gerar_pdf_detalhado_pncp(st.session_state.carrinho, config_entidade, numero_proc, desc_objeto),
-                'link': gerar_pdf_detalhado_links(st.session_state.carrinho, config_entidade, numero_proc, desc_objeto),
-                'numero_proc': numero_proc
-            }
-        except Exception as e:
-            st.sidebar.error(f"Erro ao gerar PDFs: {e}")
-
-    if 'pdfs_prontos' in st.session_state:
-        st.sidebar.success("✅ Kit de Licitação Pronto!")
-        proc_salvo = st.session_state['pdfs_prontos']['numero_proc']
-        st.sidebar.download_button("1️⃣ CAPA DO PROCESSO", data=st.session_state['pdfs_prontos']['capa'], file_name=f"1_Capa_{proc_salvo}.pdf", mime="application/pdf", key="dl_capa")
-        st.sidebar.download_button("2️⃣ MAPA DE PREÇOS", data=st.session_state['pdfs_prontos']['mapa'], file_name=f"2_Mapa_{proc_salvo}.pdf", mime="application/pdf", type="primary", key="dl_mapa")
-        st.sidebar.download_button("3️⃣ RELATÓRIO PNCP", data=st.session_state['pdfs_prontos']['pncp'], file_name=f"3_Rel_PNCP_{proc_salvo}.pdf", mime="application/pdf", key="dl_pncp")
-        st.sidebar.download_button("4️⃣ RELATÓRIO INTERNET", data=st.session_state['pdfs_prontos']['link'], file_name=f"4_Rel_Internet_{proc_salvo}.pdf", mime="application/pdf", key="dl_link")
 else:
-    st.sidebar.info("Carrinho vazio. Pesquise e adicione cotações.")
+    st.sidebar.info("O carrinho está vazio. Pesquise e adicione cotações na Aba 2.")
 
 # ==========================================
 # 🤖 RADAR DO ROBÔ
@@ -442,8 +397,9 @@ except Exception:
 # ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
-# CADEADO DE ABA: Mantém o usuário na aba correta ao excluir itens do carrinho
-aba_selecionada = st.radio("Escolha o Módulo:", ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed", key="aba_ativa")
+aba_selecionada = st.radio("Escolha o Módulo:", 
+    ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)", "🗂️ 3. Histórico e Relatórios"], 
+    horizontal=True, label_visibility="collapsed", key="aba_ativa")
 
 # ==========================================
 # TELA 0: CONFIGURAÇÕES DA ENTIDADE
@@ -570,7 +526,6 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             except: cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit(); conn.close()
-                    # REMOVIDO o redirecionamento automático que causava a tela vermelha!
                     st.success("✅ Pauta Consolidada importada com sucesso! Clique na Aba 2 (Pesquisa) para continuar.")
                     
             except Exception as e:
@@ -652,12 +607,14 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     
     st.subheader("📥 1. Escolher Pauta e Carregar Cotação Salva")
     conn = conectar_banco()
-    try: df_todas_solic = pd.read_sql_query("SELECT * FROM solicitacoes", conn)
+    
+    # A Aba 2 só mostra Pautas que estão ABERTAS
+    try: df_todas_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
     except: df_todas_solic = pd.DataFrame()
         
     if not df_todas_solic.empty:
         c_imp1, c_imp2 = st.columns([4, 1])
-        solic_escolhida = c_imp1.selectbox("Selecione a Pauta/Solicitação para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
+        solic_escolhida = c_imp1.selectbox("Selecione a Pauta/Solicitação EM ANDAMENTO para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
         id_solic_imp = int(solic_escolhida.split(" - ")[0])
         
         if c_imp2.button("📥 Carregar Pauta e Carrinho", use_container_width=True):
@@ -677,7 +634,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             st.rerun()
 
     df_itens_imp = pd.DataFrame()
-    if 'solic_importada' in st.session_state:
+    if 'solic_importada' in st.session_state and st.session_state['solic_importada'] is not None:
         id_imp = st.session_state['solic_importada']
         
         try: df_bruto_imp = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_imp}", conn)
@@ -722,7 +679,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             if item_selecionado:
                 st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['mem_qtd_relatorio']}**")
     
-    conn.close()
     st.divider()
 
     st.subheader("2. Buscar no Banco do Governo (PNCP)")
@@ -800,7 +756,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
-        conn = conectar_banco()
         query = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0"
         
         def aplicar_busca(texto, qry, operador="AND"):
@@ -856,7 +811,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
 
         except Exception as e:
             st.error(f"Erro no banco: {e}")
-        conn.close()
 
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
@@ -878,7 +832,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             }
         )
         
-        # 🛡️ BLINDAGEM DA MEMÓRIA SOMBRA: Desvinculado do reset de formulário
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['mem_nome_relatorio'])
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['mem_qtd_relatorio']), step=1.0)
@@ -905,20 +858,15 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 else:
                     st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
                 
-    # ==========================================
-    # 🔍 PLANILHA DE RAIO-X MELHORADA
-    # ==========================================
     st.divider()
     st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
     if not st.session_state.carrinho.empty:
-        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema. A Página 1 do PDF mostrará apenas 1 linha com o Valor Médio daquele grupo, e a Página 2 mostrará as empresas separadas detalhadamente.")
+        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema na hora de gerar os PDFs.")
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
         
         st.dataframe(
             df_raiox, 
-            use_container_width=True, 
-            hide_index=True, 
-            height=300,
+            use_container_width=True, hide_index=True, height=300,
             column_config={
                 "produto_mapa": st.column_config.TextColumn("🏷️ NOME DO GRUPO (PDF)", width="medium"), 
                 "descricao_item": st.column_config.TextColumn("📄 Descrição da Nota Fiscal", width="large"), 
@@ -958,3 +906,85 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.success("✅ Cotação da internet adicionada à cesta!")
             else:
                 st.error("Preencha a descrição, loja e o valor para adicionar.")
+                
+    # ==========================================
+    # 🎯 FINALIZAR PROCESSO DE COTAÇÃO
+    # ==========================================
+    st.divider()
+    st.header("🎯 4. Finalizar Cotação")
+    st.info("Terminou de cotar todos os itens da planilha? Clique abaixo para trancar esta cotação e enviá-la para o Histórico Definitivo.")
+    
+    if st.button("🔒 Finalizar Cotação e Enviar para o Histórico", type="primary", use_container_width=True):
+        if 'solic_importada' in st.session_state and st.session_state['solic_importada'] is not None:
+            id_imp = st.session_state['solic_importada']
+            
+            conn.execute("UPDATE solicitacoes SET status='FINALIZADA', data_solic=? WHERE id=?", (datetime.now().strftime('%d/%m/%Y %H:%M'), id_imp))
+            conn.commit()
+            
+            st.session_state['solic_importada'] = None
+            st.session_state.carrinho = pd.DataFrame()
+            st.session_state['aba_ativa'] = "🗂️ 3. Histórico e Relatórios"
+            
+            st.success("✅ Cotação Finalizada com Sucesso! Redirecionando para o Histórico...")
+            time.sleep(1.5)
+            st.rerun()
+        else:
+            st.error("Nenhuma pauta foi carregada para ser finalizada.")
+            
+    conn.close()
+
+# ==========================================
+# TELA 3: HISTÓRICO E RELATÓRIOS (NOVO)
+# ==========================================
+elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
+    st.subheader("🗂️ Histórico de Cotações Finalizadas")
+    st.markdown("Aqui ficam armazenadas as suas cotações concluídas. Você pode baixar os Relatórios em PDF ou reabrir uma cotação para alterar itens.")
+    
+    conn = conectar_banco()
+    try:
+        df_hist = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='FINALIZADA' ORDER BY id DESC", conn)
+    except:
+        df_hist = pd.DataFrame()
+        
+    if df_hist.empty:
+        st.info("Nenhuma cotação finalizada ainda. Suas cotações finalizadas na Aba 2 aparecerão aqui.")
+    else:
+        for _, row in df_hist.iterrows():
+            with st.expander(f"📁 Processo: {row['numero_solic']} | Objeto: {row['objeto'][:40]}... | Concluído em: {row['data_solic']}"):
+                st.write(f"**Órgãos Solicitantes:**")
+                st.write(row['secretarias'])
+                
+                c_hist1, c_hist2 = st.columns(2)
+                
+                # REABRIR PARA EDIÇÃO
+                if c_hist1.button("✏️ Reabrir para Edição (Alterar/Excluir Itens)", key=f"edit_{row['id']}"):
+                    conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],))
+                    conn.commit()
+                    st.session_state['solic_importada'] = row['id']
+                    st.session_state['aba_ativa'] = "📊 2. Painel Central de Cotação (Pesquisa)"
+                    st.rerun()
+                    
+                # GERAR PDFS
+                if c_hist2.button("📄 Carregar Relatórios Oficiais em PDF", key=f"pdf_{row['id']}"):
+                    df_cart_hist = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={row['id']}", conn)
+                    if not df_cart_hist.empty and df_cart_hist['dados_json'].iloc[0]:
+                        df_print = pd.read_json(StringIO(df_cart_hist['dados_json'].iloc[0]), orient='records')
+                        config_entidade = get_config_entidade()
+                        lista_sec = row['secretarias'].split('\n')
+                        
+                        st.session_state[f'pdf_capa_{row["id"]}'] = gerar_pdf_capa(config_entidade, row['numero_solic'], row['objeto'], lista_sec)
+                        st.session_state[f'pdf_mapa_{row["id"]}'] = gerar_pdf_mapa(df_print, config_entidade, row['numero_solic'], row['objeto'])
+                        st.session_state[f'pdf_pncp_{row["id"]}'] = gerar_pdf_detalhado_pncp(df_print, config_entidade, row['numero_solic'], row['objeto'])
+                        st.session_state[f'pdf_link_{row["id"]}'] = gerar_pdf_detalhado_links(df_print, config_entidade, row['numero_solic'], row['objeto'])
+                    else:
+                        st.error("O carrinho desta cotação está vazio. Reabra para edição e adicione itens.")
+                        
+                # MOSTRAR BOTÕES DE DOWNLOAD
+                if f'pdf_capa_{row["id"]}' in st.session_state:
+                    st.success("✅ Relatórios Prontos para Download!")
+                    dl1, dl2, dl3, dl4 = st.columns(4)
+                    dl1.download_button("1️⃣ BAIXAR CAPA", st.session_state[f'pdf_capa_{row["id"]}'], f"1_Capa_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_capa_{row['id']}")
+                    dl2.download_button("2️⃣ BAIXAR MAPA DE PREÇOS", st.session_state[f'pdf_mapa_{row["id"]}'], f"2_Mapa_{row['numero_solic']}.pdf", "application/pdf", type="primary", key=f"dl_mapa_{row['id']}")
+                    dl3.download_button("3️⃣ RELATÓRIO PNCP", st.session_state[f'pdf_pncp_{row["id"]}'], f"3_PNCP_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_pncp_{row['id']}")
+                    dl4.download_button("4️⃣ RELATÓRIO WEB", st.session_state[f'pdf_link_{row["id"]}'], f"4_WEB_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_link_{row['id']}")
+    conn.close()
