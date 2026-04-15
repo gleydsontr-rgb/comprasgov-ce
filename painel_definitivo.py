@@ -6,6 +6,7 @@ import time
 import os
 import sys
 import urllib.parse
+import json
 from datetime import datetime
 from io import BytesIO, StringIO
 
@@ -48,7 +49,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v6.0 Configurações de Entidade e PDFs Corporativos</p>
+    <p class="portal-subtitle">Painel Administrativo | v6.0 Configuração de Entidade e Carrinho Blindado</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -62,7 +63,7 @@ keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
     'input_nome_relatorio_form': "ITEM DA COTAÇÃO",
     'input_qtd_relatorio_form': 1.0, 'input_qtd_internet_form': 1.0,
-    'ultimo_item_selecionado': ""
+    'ultimo_item_selecionado': "", 'search_id': "default"
 }
 for key, value in keys_to_init.items():
     if key not in st.session_state: st.session_state[key] = value
@@ -76,7 +77,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS (COM CONFIGURAÇÕES GLOBAIS)
+# 📡 BANCO DE DADOS (COM CONFIGURAÇÕES E AUTO-SAVE)
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
@@ -95,12 +96,12 @@ def conectar_banco():
     cursor.execute('''CREATE TABLE IF NOT EXISTS itens_compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT, id_item TEXT, descricao_item TEXT, unid_medida TEXT, 
         valor_unitario REAL, municipio TEXT, estado TEXT, credor TEXT, data_assinatura TEXT, link_pncp TEXT, origem TEXT)''')
+    
+    # Novas tabelas de Persistência e Configuração
     cursor.execute('''CREATE TABLE IF NOT EXISTS cotacoes_salvas (id_solicitacao INTEGER PRIMARY KEY, dados_json TEXT)''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS configuracoes (id INTEGER PRIMARY KEY AUTOINCREMENT, nome_orgao TEXT, cnpj TEXT, endereco TEXT, contato TEXT, logo BLOB)''')
     
-    # NOVA TABELA PARA A ENTIDADE
-    cursor.execute('''CREATE TABLE IF NOT EXISTS configuracoes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, nome_orgao TEXT, cnpj TEXT, endereco TEXT, contato TEXT, logo BLOB)''')
-    
+    # Atualiza bancos antigos para não quebrarem
     cursor.execute("PRAGMA table_info(solicitacoes)")
     cols = [col[1] for col in cursor.fetchall()]
     if 'objeto' not in cols:
@@ -115,10 +116,8 @@ def conectar_banco():
 
 def get_config_entidade():
     conn = conectar_banco()
-    try:
-        df_cfg = pd.read_sql_query("SELECT * FROM configuracoes ORDER BY id DESC LIMIT 1", conn)
-    except:
-        df_cfg = pd.DataFrame()
+    try: df_cfg = pd.read_sql_query("SELECT * FROM configuracoes ORDER BY id DESC LIMIT 1", conn)
+    except: df_cfg = pd.DataFrame()
     conn.close()
     
     if not df_cfg.empty:
@@ -129,7 +128,7 @@ def get_config_entidade():
             'contato': df_cfg['contato'].iloc[0],
             'logo': df_cfg['logo'].iloc[0]
         }
-    return {'nome': 'ÓRGÃO PÚBLICO', 'cnpj': '', 'endereco': '', 'contato': '', 'logo': None}
+    return {'nome': 'PREFEITURA MUNICIPAL', 'cnpj': '', 'endereco': '', 'contato': '', 'logo': None}
 
 def salvar_carrinho_no_banco():
     if 'solic_importada' in st.session_state:
@@ -144,7 +143,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (COM LOGO E CNPJ)
+# 📄 FÁBRICA DE PDFs (COM LOGO E CNPJ CORPORATIVO)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -154,15 +153,16 @@ class RelatorioPDF(FPDF):
         self.tipo_relatorio = tipo_relatorio
         
     def header(self):
+        # Injeção Inteligente da Logomarca
         if self.config.get('logo'):
             try:
-                with open("logo_tmp.png", "wb") as f:
-                    f.write(self.config['logo'])
-                self.image("logo_tmp.png", 10, 8, 25)
+                logo_path = f"logo_tmp_{int(time.time())}.png"
+                with open(logo_path, "wb") as f: f.write(self.config['logo'])
+                self.image(logo_path, 10, 8, 25)
             except: pass
             
         self.set_font('Arial', 'B', 14)
-        self.cell(0, 6, tratar_texto(self.config.get('nome', '')), 0, 1, 'C')
+        self.cell(0, 6, tratar_texto(self.config.get('nome', 'ÓRGÃO COMPRADOR')), 0, 1, 'C')
         
         self.set_font('Arial', '', 8)
         linha_end = f"{self.config.get('endereco', '')} - CNPJ: {self.config.get('cnpj', '')}".strip(" -")
@@ -173,107 +173,76 @@ class RelatorioPDF(FPDF):
         self.set_font('Arial', 'B', 10)
         self.cell(0, 5, tratar_texto(self.tipo_relatorio), 0, 1, 'C')
         self.set_font('Arial', '', 9)
-        self.cell(0, 5, tratar_texto(f"Processo: {self.processo}"), 0, 1, 'C')
+        self.cell(0, 5, tratar_texto(f"Processo Nº: {self.processo}"), 0, 1, 'C')
         self.line(10, self.get_y() + 2, 200, self.get_y() + 2)
         self.ln(8)
-        
+
     def footer(self):
-        self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, tratar_texto(f'Página {self.page_no()}'), 0, 0, 'C')
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, tratar_texto(f'Página {self.page_no()}'), 0, 0, 'C')
 
 def gerar_pdf_capa(config, processo, objeto, secretarias_lista):
     pdf = FPDF()
     pdf.add_page()
     
-    # Injeção da Logomarca na Capa
     if config.get('logo'):
         try:
-            with open("logo_tmp_capa.png", "wb") as f:
-                f.write(config['logo'])
-            pdf.image("logo_tmp_capa.png", 90, 15, 30) 
+            logo_path = f"logo_capa_{int(time.time())}.png"
+            with open(logo_path, "wb") as f: f.write(config['logo'])
+            pdf.image(logo_path, 90, 15, 30) 
             pdf.set_y(50)
         except: pdf.set_y(30)
     else:
         pdf.set_y(30)
         
     pdf.set_font('Arial', 'B', 16)
-    pdf.cell(0, 8, tratar_texto(config.get('nome', '')), 0, 1, 'C')
+    pdf.cell(0, 8, tratar_texto(config.get('nome', 'ÓRGÃO COMPRADOR')), 0, 1, 'C')
     if config.get('cnpj'):
         pdf.set_font('Arial', '', 11)
         pdf.cell(0, 5, tratar_texto(f"CNPJ: {config.get('cnpj', '')}"), 0, 1, 'C')
         
     pdf.set_y(70)
     pdf.set_font('Arial', 'B', 14)
-    pdf.cell(0, 10, tratar_texto("COTAÇÃO DE PREÇOS"), border=1, ln=1, align='C', fill=False); pdf.ln(5)
+    pdf.cell(0, 10, tratar_texto("COTAÇÃO DE PREÇOS"), border=1, ln=1, align='C', fill=False)
+    pdf.ln(5)
     
     pdf.set_font('Arial', 'B', 11)
     pdf.cell(95, 8, tratar_texto("Nº DO PROCESSO:"), 'L T R', 0, 'L')
     pdf.cell(95, 8, tratar_texto("DATA DO PROCESSO:"), 'L T R', 1, 'L')
     pdf.set_font('Arial', '', 11)
     pdf.cell(95, 8, tratar_texto(processo), 'L B R', 0, 'L')
-    pdf.cell(95, 8, tratar_texto(datetime.now().strftime('%d/%m/%Y')), 'L B R', 1, 'L'); pdf.ln(5)
+    pdf.cell(95, 8, tratar_texto(datetime.now().strftime('%d/%m/%Y')), 'L B R', 1, 'L')
+    pdf.ln(5)
     
-    pdf.set_font('Arial', 'B', 11); pdf.cell(0, 8, tratar_texto("DESCRIÇÃO DO OBJETO:"), 'L T R', 1, 'L')
-    pdf.set_font('Arial', '', 11); pdf.multi_cell(0, 6, tratar_texto(objeto), border='L B R', align='L'); pdf.ln(5)
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(0, 8, tratar_texto("DESCRIÇÃO DO OBJETO:"), 'L T R', 1, 'L')
+    pdf.set_font('Arial', '', 11)
+    pdf.multi_cell(0, 6, tratar_texto(objeto), border='L B R', align='L')
+    pdf.ln(5)
     
-    pdf.set_font('Arial', 'B', 11); pdf.cell(0, 8, tratar_texto("ÓRGÃOS DO PROCESSO (SECRETARIAS SOLICITANTES):"), 0, 1, 'L')
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(0, 8, tratar_texto("ÓRGÃOS DO PROCESSO (SECRETARIAS SOLICITANTES):"), 0, 1, 'L')
     pdf.set_font('Arial', '', 10)
     for sec in secretarias_lista:
         if sec.strip():
             pdf.cell(5, 6, "-", 0, 0, 'R')
             pdf.cell(0, 6, tratar_texto(sec.strip()), 0, 1, 'L')
             
-    pdf.set_y(-50); pdf.line(60, pdf.get_y(), 150, pdf.get_y()); pdf.ln(2)
-    pdf.set_font('Arial', 'B', 10); pdf.cell(0, 6, tratar_texto("Responsável pelo Setor de Compras"), 0, 1, 'C')
-    pdf.set_font('Arial', '', 9); pdf.cell(0, 5, tratar_texto("Assinatura e Carimbo"), 0, 1, 'C')
+    pdf.set_y(-50)
+    pdf.line(60, pdf.get_y(), 150, pdf.get_y())
+    pdf.ln(2)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(0, 6, tratar_texto("Responsável pelo Setor de Compras"), 0, 1, 'C')
+    pdf.set_font('Arial', '', 9)
+    pdf.cell(0, 5, tratar_texto("Assinatura e Carimbo"), 0, 1, 'C')
     return pdf.output(dest='S').encode('latin-1')
 
-class RelatorioMapaPDF(FPDF):
-    def __init__(self, config, processo, objeto):
-        super().__init__()
-        self.config = config
-        self.processo = processo
-        self.objeto = objeto
-        self.is_resumo = True
-        
-    def header(self):
-        if self.config.get('logo'):
-            try:
-                with open("logo_tmp.png", "wb") as f:
-                    f.write(self.config['logo'])
-                self.image("logo_tmp.png", 10, 8, 25)
-            except: pass
-            
-        self.set_font('Arial', 'B', 12)
-        self.cell(0, 5, tratar_texto(self.config.get('nome', '')), 0, 1, 'C')
-        
-        self.set_font('Arial', '', 8)
-        linha_end = f"{self.config.get('endereco', '')} - CNPJ: {self.config.get('cnpj', '')}".strip(" -")
-        if linha_end != "CNPJ:": self.cell(0, 4, tratar_texto(linha_end), 0, 1, 'C')
-        if self.config.get('contato'): self.cell(0, 4, tratar_texto(self.config.get('contato', '')), 0, 1, 'C')
-        self.ln(2)
-        
-        self.set_font('Arial', 'B', 10)
-        if self.is_resumo: self.cell(0, 5, tratar_texto("RESUMO GERAL DO MAPA DE PREÇO"), 0, 1, 'C')
-        else: self.cell(0, 5, tratar_texto("MAPA DE PREÇO - DETALHAMENTO POR COLETA"), 0, 1, 'C')
-        
-        self.set_font('Arial', 'B', 9)
-        self.cell(0, 5, tratar_texto(f"N°: {self.processo} - DATA: {datetime.now().strftime('%d/%m/%Y')}"), 0, 1, 'L')
-        if self.is_resumo:
-            self.multi_cell(0, 5, tratar_texto(f"ESPECIFICAÇÃO/OBJETO: {self.objeto}"))
-        self.ln(2)
-
-    def footer(self):
-        self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, tratar_texto(f'Página(s): {self.page_no()}'), 0, 0, 'R')
-
 def gerar_pdf_mapa(df_carrinho, config, processo, objeto):
-    pdf = RelatorioMapaPDF(config, processo, objeto)
-    if 'produto_mapa' not in df_carrinho.columns:
-        df_carrinho['produto_mapa'] = df_carrinho['descricao_item']
-        
+    pdf = RelatorioPDF(config, processo, "MAPA DE PREÇOS CONSOLIDADO")
+    if 'produto_mapa' not in df_carrinho.columns: df_carrinho['produto_mapa'] = df_carrinho['descricao_item']
     grupos = df_carrinho.groupby('produto_mapa', sort=False)
     
-    # --- PÁGINA 1: RESUMO ---
-    pdf.is_resumo = True
     pdf.add_page()
     pdf.set_font('Arial', 'B', 8)
     cols = [("Item", 10), ("Descrição", 90), ("Unid.", 15), ("Qtd", 15), ("V. Médio", 30), ("V. Total", 30)]
@@ -297,8 +266,6 @@ def gerar_pdf_mapa(df_carrinho, config, processo, objeto):
     pdf.set_font('Arial', 'B', 9); pdf.cell(160, 8, "TOTAL GERAL DA PAUTA:", 0, 0, 'R')
     pdf.cell(30, 8, f"R$ {total_geral:,.2f}", 0, 1, 'R')
     
-    # --- PÁGINA 2: DETALHES ---
-    pdf.is_resumo = False
     pdf.add_page()
     for nome, gp in grupos:
         unid = gp['unid_medida'].iloc[0]; qtd = gp['quantidade'].iloc[0]
@@ -359,7 +326,7 @@ st.sidebar.title("🛒 Cotações Salvas")
 
 if not st.session_state.carrinho.empty:
     resumo = st.session_state.carrinho.groupby('produto_mapa').agg({'valor_unitario': 'count', 'quantidade': 'max'})
-    st.sidebar.success(f"**{len(resumo)}** produtos no carrinho.")
+    st.sidebar.success(f"**{len(resumo)}** grupos de produtos no carrinho.")
     st.sidebar.dataframe(st.session_state.carrinho[['produto_mapa', 'valor_unitario', 'quantidade']], hide_index=True)
     
     st.sidebar.divider()
@@ -423,28 +390,6 @@ else:
     st.sidebar.info("Carrinho vazio. Pesquise e adicione cotações.")
 
 # ==========================================
-# 🤖 RADAR DO ROBÔ
-# ==========================================
-st.sidebar.divider()
-st.sidebar.subheader("🤖 Radar do Banco")
-try:
-    conn_radar = conectar_banco()
-    df_radar = pd.read_sql_query("SELECT COUNT(*) as total, MAX(data_assinatura) as ultima_data FROM itens_compras", conn_radar)
-    total_itens = df_radar['total'].iloc[0]
-    ultima_data = df_radar['ultima_data'].iloc[0]
-    conn_radar.close()
-    
-    if total_itens > 0:
-        st.sidebar.write(f"📦 Itens no Cofre: **{total_itens:,}**".replace(',', '.'))
-        st.sidebar.write(f"🔄 Última Captura: **{ultima_data}**")
-        st.sidebar.success("✅ Robô Local Operante.")
-    else:
-        st.sidebar.write("📦 Itens no Cofre: **0**")
-        st.sidebar.warning("⏳ Aguardando ronda do robô.")
-except Exception:
-    pass
-
-# ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
 aba_selecionada = st.radio("Escolha o Módulo:", ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)"], horizontal=True, label_visibility="collapsed")
@@ -474,19 +419,16 @@ if aba_selecionada == "⚙️ 0. Configurações":
         st.markdown("**Logomarca do Órgão**")
         logo_file = st.file_uploader("Envie a imagem (Preferência para fundo transparente PNG)", type=['png', 'jpg', 'jpeg'])
         
-        if st.form_submit_button("💾 Salvar Configurações"):
+        if st.form_submit_button("💾 Salvar Configurações Gerais"):
             logo_blob = None
-            if logo_file is not None:
-                logo_blob = logo_file.read()
-            elif not df_cfg.empty and df_cfg['logo'].iloc[0] is not None:
-                logo_blob = df_cfg['logo'].iloc[0]
+            if logo_file is not None: logo_blob = logo_file.read()
+            elif not df_cfg.empty and df_cfg['logo'].iloc[0] is not None: logo_blob = df_cfg['logo'].iloc[0]
                 
             conn.execute("DELETE FROM configuracoes")
             conn.execute("INSERT INTO configuracoes (nome_orgao, cnpj, endereco, contato, logo) VALUES (?, ?, ?, ?, ?)", (nome.upper(), cnpj, end.upper(), cont, logo_blob))
             conn.commit()
             st.success("✅ Configurações e Logomarca salvas com sucesso! Elas aparecerão no cabeçalho de todos os PDFs.")
-            time.sleep(1.5)
-            st.rerun()
+            time.sleep(1.5); st.rerun()
     conn.close()
 
 # ==========================================
@@ -596,10 +538,8 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 conn = conectar_banco()
                 conn.execute("INSERT INTO solicitacoes (numero_solic, secretaria, data_solic, status, objeto, secretarias) VALUES (?, ?, ?, ?, ?, ?)", 
                              (num_gerado, nome_sec.upper(), datetime.now().strftime('%d/%m/%Y'), 'ABERTA', obj_man.upper(), sec_man.upper()))
-                conn.commit()
-                conn.close()
-                st.success(f"Solicitação manual criada!")
-                st.rerun()
+                conn.commit(); conn.close()
+                st.success(f"Solicitação manual criada!"); st.rerun()
 
     conn = conectar_banco()
     try: df_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
@@ -617,8 +557,7 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 if st.form_submit_button("Criar Lote Manual"):
                     if nome_lote:
                         conn.execute("INSERT INTO lotes_solicitacao (id_solicitacao, nome_lote, desc_lote) VALUES (?, ?, ?)", (id_solic, nome_lote.upper(), ""))
-                        conn.commit()
-                        st.rerun()
+                        conn.commit(); st.rerun()
         
         df_lotes = pd.read_sql_query(f"SELECT * FROM lotes_solicitacao WHERE id_solicitacao={id_solic}", conn)
         with c_item:
@@ -632,17 +571,12 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     qtd_item = ci_2.number_input("Qtd", min_value=1.0)
                     if st.form_submit_button("Inserir Item Manual"):
                         if desc_item and unid_item:
-                            try:
-                                conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
-                            except sqlite3.OperationalError:
-                                conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper()))
-                            conn.commit()
-                            st.rerun()
+                            try: conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
+                            except sqlite3.OperationalError: conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper()))
+                            conn.commit(); st.rerun()
                             
-        try:
-            df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
-        except Exception:
-            df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        try: df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid, i.* FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
+        except Exception: df_bruto = pd.read_sql_query(f"SELECT l.nome_lote as Lote, i.descricao as Produto, i.unid_medida as Unid FROM itens_solicitacao i JOIN lotes_solicitacao l ON i.id_lote = l.id WHERE i.id_solicitacao={id_solic}", conn)
             
         df_itens = pd.DataFrame()
         if not df_bruto.empty:
@@ -668,15 +602,15 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         solic_escolhida = c_imp1.selectbox("Selecione a Pauta/Solicitação para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
         id_solic_imp = int(solic_escolhida.split(" - ")[0])
         
-        if c_imp2.button("📥 Carregar Pauta e Carrinho", use_container_width=True):
+        if c_imp2.button("📥 Carregar Pauta", use_container_width=True):
             st.session_state['solic_importada'] = id_solic_imp
             
-            # --- EXTERMINADOR DE FANTASMAS (CARREGAMENTO AUTO-SAVE BLINDADO) ---
+            # --- CARREGAMENTO AUTO-SAVE (COM EXTERMINADOR DE FANTASMAS) ---
             df_cart = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={id_solic_imp}", conn)
             if not df_cart.empty and df_cart['dados_json'].iloc[0]:
                 try: 
                     df_load = pd.read_json(StringIO(df_cart['dados_json'].iloc[0]), orient='records')
-                    df_load.dropna(subset=['produto_mapa', 'valor_unitario'], inplace=True) # Destrói fantasmas
+                    df_load.dropna(subset=['produto_mapa', 'valor_unitario'], inplace=True) 
                     if not df_load.empty: st.session_state.carrinho = df_load
                     else: st.session_state.carrinho = pd.DataFrame()
                 except: st.session_state.carrinho = pd.DataFrame()
@@ -697,9 +631,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             df_itens_imp['Unid'] = df_bruto_imp['Unid']
             df_itens_imp['Qtd'] = df_bruto_imp['quantidade'] if 'quantidade' in df_bruto_imp.columns else 1.0
 
-            st.markdown("### 📋 Planilha Extraída")
-            st.dataframe(df_itens_imp, use_container_width=True, hide_index=True)
-            
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos, key="sel_item_pauta")
             
@@ -728,7 +659,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.rerun() 
                 
             if item_selecionado:
-                st.success(f"✔️ Item: **{item_selecionado}** | 📦 Quantidade Total: **{st.session_state['input_qtd_relatorio_form']}**")
+                st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['input_qtd_relatorio_form']}**")
     
     conn.close()
     st.divider()
@@ -756,6 +687,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
+    # ==========================================
+    # VAREJADOR IA (BUSCA NACIONAL)
+    # ==========================================
     def acionar_varejador(termo_busca, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(1.5) 
@@ -807,6 +741,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.error("❌ Nada encontrado em nenhum estado do Brasil.")
 
     if submit:
+        st.session_state['search_id'] = str(time.time())
         conn = conectar_banco()
         query = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0"
         
@@ -860,7 +795,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 termo_completo = f"{p1} {p2} {p3}".strip()
                 termo_varejo = remover_acentos(termo_completo) if termo_completo else "ITEM"
                 acionar_varejador(termo_varejo, df)
-
         except Exception as e:
             st.error(f"Erro no banco: {e}")
         conn.close()
@@ -869,8 +803,11 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         colunas_mostrar = ['Selecionar', 'descricao_item', 'unid_medida', 'valor_unitario', 'municipio', 'estado', 'credor', 'data_assinatura', 'id_item', 'link_pncp', 'origem']
         df_exibicao = st.session_state.df_resultados[colunas_mostrar]
         
+        # A MÁGICA CONTRA A AMNÉSIA DA TABELA
+        chave_dinamica = f"editor_busca_{st.session_state.get('search_id', 'default')}"
         df_editado = st.data_editor(
             df_exibicao,
+            key=chave_dinamica,
             use_container_width=True, hide_index=True, height=350,
             column_config={
                 "Selecionar": st.column_config.CheckboxColumn("✅", required=True),
@@ -886,23 +823,29 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         nome_grupo = c_add1.text_input("📝 Nome para o Relatório:", key="input_nome_relatorio_form")
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="input_qtd_relatorio_form")
         
-        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True, key="btn_add_carrinho"):
+        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
             selecionados = df_editado[df_editado['Selecionar'] == True].copy()
             selecionados = selecionados.drop(columns=['Selecionar'])
             if not selecionados.empty:
                 selecionados['produto_mapa'] = remover_acentos(nome_grupo).strip()
                 selecionados['quantidade'] = float(qtd_grupo) 
-                st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados]).drop_duplicates(subset=['id_item'])
+                
+                # A MÁGICA CONTRA O BUG DO CLONE
+                selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
+                st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
                 st.session_state['ultimo_item_selecionado'] = ""
                 salvar_carrinho_no_banco()
                 st.rerun()
             else:
                 st.warning("Selecione pelo menos um item.")
                 
+    # ==========================================
+    # 🔍 PLANILHA DE RAIO-X
+    # ==========================================
     st.divider()
     st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
     if not st.session_state.carrinho.empty:
-        st.info("💡 **COMO FUNCIONA O MAPA DE PREÇOS:** Colete cotações de empresas diferentes para formar a Média. O PDF juntará essas cotações em 1 única linha no Resumo e detalhará as empresas na Página 2.")
+        st.info("💡 **COMO FUNCIONA O MAPA:** Colete cotações para formar a Média. O PDF juntará essas cotações em 1 única linha no Resumo e detalhará as empresas na Página 2.")
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
         st.dataframe(df_raiox, use_container_width=True, hide_index=True, column_config={
             "produto_mapa": "Grupo no PDF", "descricao_item": "Descrição Bruta da Nota", "credor": "Fornecedor",
@@ -930,7 +873,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     'descricao_item': remover_acentos(desc_int), 'produto_mapa': remover_acentos(desc_int).strip(), 
                     'unid_medida': remover_acentos(unid_int), 'valor_unitario': float(val_int),
                     'municipio': 'LOJA VIRTUAL', 'estado': '-', 'credor': forn_int.upper(),
-                    'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"INT-{int(time.time())}",
+                    'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"INT-{time.time()}",
                     'link_pncp': link_int, 'origem': 'INTERNET', 'quantidade': float(qtd_int)
                 }])
                 st.session_state.carrinho = pd.concat([st.session_state.carrinho, novo_item], ignore_index=True)
