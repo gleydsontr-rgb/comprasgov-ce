@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v7.3 Blindagem de Interface e Memória</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.0 Estabilidade Absoluta e Navegação Segura</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,7 +58,7 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
-# CHAVES BLINDADAS PARA EVITAR O APAGÃO DOS CAMPOS E ERROS DE ABA
+# CHAVES BLINDADAS (UNIFICADAS PARA EVITAR APAGÕES E CONFLITOS DE ABA)
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
     'nome_relatorio_input': "ITEM DA COTAÇÃO", 'qtd_relatorio_input': 1.0,
@@ -398,16 +398,11 @@ except Exception:
     pass
 
 # ==========================================
-# 🗂️ MÓDULOS DE NAVEGAÇÃO
+# 🗂️ MÓDULOS DE NAVEGAÇÃO (CADEADO DE ABA SEGURO)
 # ==========================================
 opcoes_menu = ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)", "🗂️ 3. Histórico e Relatórios"]
-try: idx_aba = opcoes_menu.index(st.session_state['menu_option'])
-except ValueError: idx_aba = 0
-
-aba_selecionada = st.radio("Escolha o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
-if aba_selecionada != st.session_state['menu_option']:
-    st.session_state['menu_option'] = aba_selecionada
-    st.rerun()
+# Navegação estática para não explodir a Exception
+aba_selecionada = st.radio("Escolha o Módulo:", opcoes_menu, key="menu_option", horizontal=True, label_visibility="collapsed")
 
 # ==========================================
 # TELA 0: CONFIGURAÇÕES DA ENTIDADE
@@ -534,8 +529,9 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             except: cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Pauta Consolidada importada com sucesso! Clique na Aba 2 (Pesquisa) para continuar.")
-                    
+                    # Orientação manual para não dar conflito no Streamlit
+                    st.success("✅ Pauta Consolidada importada com sucesso! 👆 Suba a tela e clique na Aba '📊 2. Painel Central de Cotação (Pesquisa)' para continuar.")
+                    st.balloons()
             except Exception as e:
                 st.error(f"Erro ao processar o arquivo: {e}")
 
@@ -659,6 +655,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             lista_produtos = df_itens_imp['Produto'].tolist()
             item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos)
             
+            # 🛡️ A CHAVE DE OURO: Atualiza as chaves oficais do formulário apenas se o usuário mudar a escolha do dropdown.
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
                 if item_selecionado:
@@ -668,6 +665,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
+                    # Sobrescreve as caixas para auto-preenchimento
                     st.session_state['nome_relatorio_input'] = item_selecionado
                     st.session_state['qtd_relatorio_input'] = qtd_extraida
                     
@@ -683,7 +681,8 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.rerun() 
                 
             if item_selecionado:
-                st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['qtd_relatorio_input']}**")
+                # Mostra o que está salvo na memória oficial da caixa, para você ter certeza!
+                st.success(f"✔️ Item Pronto para Cotação: **{st.session_state['nome_relatorio_input']}** | 📦 Qtd Total: **{st.session_state['qtd_relatorio_input']}**")
     
     conn.close()
     st.divider()
@@ -695,7 +694,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         p1 = c1.text_input("Palavra Principal", key="p1_busca_form")
         p2 = c2.text_input("Contendo também (1)", key="p2_busca_form")
         p3 = c3.text_input("Contendo também (2)", key="p3_busca_form")
-        p_excluir = c4.text_input("🚫 NÃO pode conter")
+        p_excluir = c4.text_input("🚫 NÃO pode conter", key="pex_busca")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
         modo_busca = c5.selectbox("🧠 Inteligência da Busca", ["🔍 Ampla (Qualquer parte do texto)", "🎯 Inteligente (Focar no Nome do Produto)"])
@@ -824,11 +823,40 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
         
-        # --- BLINDAGEM: CAIXAS DE CONFIGURAÇÃO MOVIDAS PARA CIMA DA TABELA DINÂMICA ---
+        # 🛡️ BLINDAGEM DE INTERFACE: As caixas agora ficam ACIMA da tabela!
+        # Isso impede que elas sejam desconectadas ou sofram "apagão" quando a tabela recarrega.
         st.markdown("#### ⚙️ Configuração do Item para o Carrinho")
-        c_add1, c_add2 = st.columns([3, 1.5])
+        c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", key="nome_relatorio_input")
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="qtd_relatorio_input")
+        
+        # O botão fica inativo visualmente se o nome estiver em branco, mas protegido pelo Python
+        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
+            if not st.session_state['nome_relatorio_input'].strip():
+                st.error("🚨 ERRO: O Nome do Relatório não pode ficar em branco! Preencha a caixa acima antes de adicionar.")
+            else:
+                chave_d = f"editor_busca_{st.session_state.get('search_id', 'default')}"
+                if chave_d in st.session_state:
+                    df_atual = st.session_state[chave_d]
+                    # Identifica as linhas que o usuário marcou na tela
+                    linhas_marcadas = [idx for idx, row in df_atual.get('edited_rows', {}).items() if row.get('Selecionar', False)]
+                    
+                    if linhas_marcadas:
+                        selecionados = st.session_state.df_resultados.iloc[linhas_marcadas].copy()
+                        selecionados['produto_mapa'] = remover_acentos(st.session_state['nome_relatorio_input']).strip()
+                        selecionados['quantidade'] = float(st.session_state['qtd_relatorio_input']) 
+                        
+                        selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
+                        st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
+                        st.session_state['ultimo_item_selecionado'] = ""
+                        salvar_carrinho_no_banco()
+                        st.success("✅ Cotações adicionadas com sucesso!")
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("Selecione pelo menos um item marcando o ✅ na tabela abaixo.")
+                else:
+                    st.warning("Selecione pelo menos um item marcando o ✅ na tabela abaixo.")
         
         colunas_mostrar = ['Selecionar', 'descricao_item', 'unid_medida', 'valor_unitario', 'municipio', 'estado', 'credor', 'data_assinatura', 'id_item', 'link_pncp', 'origem']
         df_exibicao = st.session_state.df_resultados[colunas_mostrar]
@@ -847,26 +875,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 "link_pncp": st.column_config.LinkColumn("Edital", display_text="🔗 Acessar")
             }
         )
-        
-        if st.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
-            if not st.session_state['nome_relatorio_input'].strip():
-                st.error("🚨 ERRO: O Nome do Relatório não pode ficar em branco! Preencha a caixa acima antes de adicionar.")
-            else:
-                selecionados = df_editado[df_editado['Selecionar'] == True].copy()
-                selecionados = selecionados.drop(columns=['Selecionar'])
-                if not selecionados.empty:
-                    selecionados['produto_mapa'] = remover_acentos(st.session_state['nome_relatorio_input']).strip()
-                    selecionados['quantidade'] = float(st.session_state['qtd_relatorio_input'])
-                    
-                    selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
-                    st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
-                    st.session_state['ultimo_item_selecionado'] = ""
-                    salvar_carrinho_no_banco()
-                    st.success("✅ Cotações adicionadas com sucesso!")
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
                 
     # ==========================================
     # 🔍 PLANILHA DE RAIO-X
@@ -938,11 +946,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             
             st.session_state['solic_importada'] = None
             st.session_state.carrinho = pd.DataFrame()
-            st.session_state['menu_option'] = "🗂️ 3. Histórico e Relatórios"
             
-            st.success("✅ Cotação Finalizada com Sucesso! Redirecionando para o Histórico...")
-            time.sleep(1.5)
-            st.rerun()
+            # Sem Rerun Automático para não causar Erro Vermelho! O usuário clica na Aba 3.
+            st.success("✅ Cotação Finalizada com Sucesso! 👆 Suba a tela e clique na Aba '🗂️ 3. Histórico e Relatórios' para gerar os PDFs.")
+            st.balloons()
         else:
             st.error("Nenhuma pauta foi carregada para ser finalizada.")
 
@@ -971,8 +978,9 @@ elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
                     conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],))
                     conn.commit()
                     st.session_state['solic_importada'] = row['id']
-                    st.session_state['menu_option'] = "📊 2. Painel Central de Cotação (Pesquisa)" 
-                    st.rerun()
+                    
+                    # Sem Rerun Automático para não causar Erro Vermelho! O usuário clica na Aba 2.
+                    st.success("✅ Cotação Reaberta! 👆 Suba a tela e clique na Aba '📊 2. Painel Central de Cotação (Pesquisa)'.")
                     
                 if c_hist2.button("📄 Carregar Relatórios Oficiais em PDF", key=f"pdf_{row['id']}"):
                     df_cart_hist = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={row['id']}", conn)
