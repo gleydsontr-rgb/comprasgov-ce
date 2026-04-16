@@ -6,8 +6,12 @@ import time
 import os
 import sys
 import urllib.parse
+import urllib3
 from datetime import datetime
 from io import BytesIO, StringIO
+
+# Desativa alertas chatos de segurança do Governo no console
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # ==========================================
 # BIBLIOTECAS EXTERNAS
@@ -48,7 +52,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.1 O "Cofre de Memória" (Anti-Amnésia)</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.2 Varejador IA Nacional "Sem Coleira"</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -58,7 +62,7 @@ st.markdown("""
 if 'carrinho' not in st.session_state: st.session_state.carrinho = pd.DataFrame()
 if 'df_resultados' not in st.session_state: st.session_state.df_resultados = pd.DataFrame()
 
-# CHAVES BLINDADAS E O NOVO "COFRE DE MEMÓRIA" (SAFE)
+# CHAVES BLINDADAS E O "COFRE DE MEMÓRIA" (SAFE)
 keys_to_init = {
     'p1_busca_form': "", 'p2_busca_form': "", 'p3_busca_form': "",
     'safe_nome_relatorio': "ITEM DA COTAÇÃO", 'safe_qtd_relatorio': 1.0,
@@ -668,7 +672,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # O NOVO COFRE DE MEMÓRIA (DESVINCULADO DA CAIXA DE TEXTO DO STREAMLIT)
+                    # COFRE DE MEMÓRIA (Imune a apagões)
                     st.session_state['safe_nome_relatorio'] = item_selecionado
                     st.session_state['safe_qtd_relatorio'] = qtd_extraida
                     
@@ -716,29 +720,45 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(1.5) 
             df_varejador = pd.DataFrame()
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json, text/plain, */*', 'Accept-Language': 'pt-BR,pt;q=0.9'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json'
+            }
             
-            stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
-            palavras = [p for p in remover_acentos(termo_busca).split() if p not in stopwords]
+            palavras = [p for p in remover_acentos(termo_busca).split() if len(p) > 1]
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
             try:
                 url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item"
-                resposta = requests.get(url_api, headers=headers, timeout=15)
+                resposta = requests.get(url_api, headers=headers, timeout=15, verify=False)
                 if resposta.status_code == 200:
                     dados = resposta.json()
                     itens_api = dados.get('items', [])
                     
                     lista_vars = []
                     for i, it in enumerate(itens_api[:100]):
-                        titulo_bruto = str(it.get('title', '')).upper()
-                        titulo_limpo = remover_acentos(titulo_bruto)
+                        titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
+                        valor_est = float(it.get('valorUnitarioEstimado', 0))
                         
-                        if all(p in titulo_limpo for p in palavras):
-                            valor_est = float(it.get('valorUnitarioEstimado', 0))
-                            if valor_est > 0:
-                                lista_vars.append({'descricao_item': titulo_bruto, 'unid_medida': 'UN', 'valor_unitario': valor_est, 'municipio': 'BRASIL (PNCP NACIONAL)', 'estado': 'BR', 'credor': 'FORNECEDOR VIA VAREJADOR', 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-{int(time.time())}-{i}", 'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 'origem': 'VAREJADOR NACIONAL'})
+                        # Varejador Sem Coleira: Se a API retornou e tem preço, nós trazemos!
+                        if valor_est > 0:
+                            mun = str(it.get('municipioNome', 'NACIONAL')).upper()
+                            uf_api = str(it.get('ufSigla', 'BR')).upper()
+                            orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
+                            
+                            lista_vars.append({
+                                'descricao_item': titulo_bruto, 
+                                'unid_medida': 'UN', 
+                                'valor_unitario': valor_est, 
+                                'municipio': mun, 
+                                'estado': uf_api, 
+                                'credor': f"FONTE: {orgao}", 
+                                'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
+                                'id_item': f"VAR-{int(time.time())}-{i}", 
+                                'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
+                                'origem': 'VAREJADOR NACIONAL'
+                            })
                     if lista_vars: df_varejador = pd.DataFrame(lista_vars)
             except Exception: pass
                 
@@ -757,10 +777,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     df_local_existente['municipio'] = df_local_existente['municipio'].fillna('Não Informado')
                     df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                     st.session_state.df_resultados = df_local_existente
-                    st.warning("⚠️ O Varejador IA não achou correspondência exata nacional.")
+                    st.warning("⚠️ O Varejador não encontrou itens extras com valor para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ Nada encontrado em nenhum estado do Brasil.")
+                    st.error("❌ Nada encontrado no banco local nem no Varejador Nacional para estes termos.")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
@@ -825,13 +845,14 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
         
-        # 🛡️ BLINDAGEM DO COFRE: Não usamos a variável Key vulnerável. Lemos direto do Cofre.
         st.markdown("#### ⚙️ Configuração do Item para o Carrinho")
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
+        
+        # Lê do Cofre e desenha a caixa de texto
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['safe_nome_relatorio'])
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
         
-        # O Cofre se atualiza instantaneamente com o que você digita
+        # Guarda no Cofre imediatamente qualquer coisa que você digitar, independentemente de botão!
         st.session_state['safe_nome_relatorio'] = nome_grupo
         st.session_state['safe_qtd_relatorio'] = qtd_grupo
         
@@ -902,7 +923,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1])
         desc_int = c_int1.text_input("Descrição do Item da Web")
         unid_int = c_int2.text_input("Unidade")
-        qtd_int = c_int5.number_input("Quantidade", step=1.0, key="input_qtd_internet_form") 
+        qtd_int = c_int5.number_input("Quantidade", step=1.0) 
         
         c_int3, c_int4 = st.columns([2, 1])
         forn_int = c_int3.text_input("Nome da Loja Varejista e CNPJ")
