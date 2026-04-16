@@ -52,7 +52,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.4 Varejador Geográfico Turbinado</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.5 Varejador Desbloqueado com Filtro Silencioso</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -672,7 +672,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # COFRE DE MEMÓRIA ATUALIZADO
                     st.session_state['safe_nome_relatorio'] = item_selecionado
                     st.session_state['safe_qtd_relatorio'] = qtd_extraida
                     
@@ -717,7 +716,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (BUSCA ESTADUAL APRIMORADA)
+    # VAREJADOR IA (Filtro Silencioso de Alta Performance)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
@@ -729,12 +728,12 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             }
             
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
-            palavras = [p for p in remover_acentos(termo_busca).split() if p not in stopwords]
+            palavras = [p for p in remover_acentos(termo_busca).split() if len(p) > 1]
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
             try:
-                # O Pulo do Gato: Puxa 500 itens globais (tamanhoPagina=500) para depois filtrar
+                # O Segredo: Busca pura sem UF, puxando 500 resultados de uma vez!
                 url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina=1&tamanhoPagina=500"
                 resposta = requests.get(url_api, headers=headers, timeout=20, verify=False)
                 if resposta.status_code == 200:
@@ -768,7 +767,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                                     'origem': 'VAREJADOR NACIONAL'
                                 }
                                 
-                                # Separação Geográfica Inteligente
                                 if uf_buscada != "TODAS":
                                     if uf_api == uf_buscada:
                                         lista_vars_estado.append(item_montado)
@@ -777,14 +775,14 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                                 else:
                                     lista_vars_estado.append(item_montado)
                                     
-                    # Lógica de Fallback (Plano B)
+                    # Fallback (Plano B)
                     usou_fallback = False
                     if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
                         lista_vars_estado = lista_vars_outros
                         usou_fallback = True
                         
                     if lista_vars_estado: 
-                        df_varejador = pd.DataFrame(lista_vars_estado[:100]) # Limita a 100 pra não pesar a tela
+                        df_varejador = pd.DataFrame(lista_vars_estado[:100])
                         
             except Exception: pass
                 
@@ -878,7 +876,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
         st.markdown("#### ⚙️ Configuração do Item para o Carrinho")
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['safe_nome_relatorio'])
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
         
@@ -972,9 +969,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             else:
                 st.error("Preencha a descrição, loja e o valor para adicionar.")
                 
-    # ==========================================
-    # 🎯 FINALIZAR PROCESSO DE COTAÇÃO
-    # ==========================================
     st.divider()
     st.header("🎯 4. Finalizar Cotação")
     st.info("Terminou de cotar todos os itens da planilha? Clique abaixo para trancar esta cotação e enviá-la para o Histórico Definitivo.")
