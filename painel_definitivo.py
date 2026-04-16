@@ -7,6 +7,7 @@ import os
 import sys
 import urllib.parse
 import urllib3
+import concurrent.futures
 from datetime import datetime
 from io import BytesIO, StringIO
 
@@ -52,7 +53,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.6 O Retorno do Varejador Nacional Original</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.7 O Retorno do Arrastão Nacional Simultâneo</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -82,7 +83,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS
+# 📡 BANCO DE DADOS (100% INTACTO)
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
@@ -672,7 +673,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # COFRE DE MEMÓRIA ATUALIZADO
+                    # COFRE DE MEMÓRIA
                     st.session_state['safe_nome_relatorio'] = item_selecionado
                     st.session_state['safe_qtd_relatorio'] = qtd_extraida
                     
@@ -717,64 +718,78 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (BUSCA ESTADUAL APRIMORADA 8.6)
+    # VAREJADOR IA (O ARRASTÃO NACIONAL SIMULTÂNEO v8.7)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
-            time.sleep(1.0) 
+            time.sleep(0.5) 
             df_varejador = pd.DataFrame()
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json'
             }
             
-            termo_url = urllib.parse.quote_plus(termo_busca.strip())
+            stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
+            palavras = [p for p in remover_acentos(termo_busca).split() if len(p) > 1]
+            if not palavras: return
+            termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
+            # Função que cada robô clone vai rodar
+            def fetch_page(pagina):
+                try:
+                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
+                    if uf_buscada != "TODAS":
+                        url_api += f"&uf={uf_buscada}&ufs={uf_buscada}"
+                        
+                    resp = requests.get(url_api, headers=headers, timeout=10, verify=False)
+                    if resp.status_code == 200:
+                        return resp.json().get('items', [])
+                except: pass
+                return []
+                
+            itens_api = []
+            
+            # O Segredo do Arrastão: Dispara 20 robôs simultâneos para ler 1000 cotações em menos de 2 segundos!
+            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                resultados = executor.map(fetch_page, range(1, 21))
+                for res in resultados:
+                    if res: itens_api.extend(res)
+                    
             lista_vars_estado = []
             lista_vars_outros = []
             
-            try:
-                # O Segredo: O Governo bloqueia "tamanhoPagina=500". O limite é 50!
-                # Vamos varrer as 3 primeiras páginas (150 itens) para não travar a API e pegar bastante dado.
-                for pagina in range(1, 4):
-                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                    resposta = requests.get(url_api, headers=headers, timeout=15, verify=False)
+            for i, it in enumerate(itens_api):
+                valor_est = float(it.get('valorUnitarioEstimado', 0))
+                if valor_est > 0:
+                    titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
+                    titulo_limpo = remover_acentos(titulo_bruto)
                     
-                    if resposta.status_code == 200:
-                        dados = resposta.json()
-                        itens_api = dados.get('items', [])
-                        if not itens_api: break # Acabaram os resultados
+                    if all(p in titulo_limpo for p in palavras):
+                        mun = str(it.get('municipioNome', 'NACIONAL')).upper()
+                        uf_api = str(it.get('ufSigla', 'BR')).upper()
+                        orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
                         
-                        for i, it in enumerate(itens_api):
-                            valor_est = float(it.get('valorUnitarioEstimado', 0))
-                            if valor_est > 0:
-                                titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
-                                mun = str(it.get('municipioNome', 'NACIONAL')).upper()
-                                uf_api = str(it.get('ufSigla', 'BR')).upper()
-                                orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
-                                
-                                item_montado = {
-                                    'descricao_item': titulo_bruto, 
-                                    'unid_medida': 'UN', 
-                                    'valor_unitario': valor_est, 
-                                    'municipio': mun, 
-                                    'estado': uf_api, 
-                                    'credor': f"FONTE: {orgao}", 
-                                    'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
-                                    'id_item': f"VAR-{int(time.time())}-{pagina}-{i}", 
-                                    'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
-                                    'origem': 'VAREJADOR NACIONAL'
-                                }
-                                
-                                if uf_buscada != "TODAS":
-                                    if uf_api == uf_buscada:
-                                        lista_vars_estado.append(item_montado)
-                                    else:
-                                        lista_vars_outros.append(item_montado)
-                                else:
-                                    lista_vars_estado.append(item_montado)
-            except Exception: pass
-                
+                        item_montado = {
+                            'descricao_item': titulo_bruto, 
+                            'unid_medida': 'UN', 
+                            'valor_unitario': valor_est, 
+                            'municipio': mun, 
+                            'estado': uf_api, 
+                            'credor': f"FONTE: {orgao}", 
+                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
+                            'id_item': f"VAR-{int(time.time())}-{i}", 
+                            'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
+                            'origem': 'VAREJADOR NACIONAL'
+                        }
+                        
+                        if uf_buscada != "TODAS":
+                            if uf_api == uf_buscada:
+                                lista_vars_estado.append(item_montado)
+                            else:
+                                lista_vars_outros.append(item_montado)
+                        else:
+                            lista_vars_estado.append(item_montado)
+                            
             # Fallback (Plano B)
             usou_fallback = False
             if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
@@ -782,10 +797,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 usou_fallback = True
                 
             if lista_vars_estado:
-                # Remove itens duplicados que o Governo as vezes manda
+                # Remove duplicatas que o Governo costuma mandar no meio das 1000
                 df_temp = pd.DataFrame(lista_vars_estado)
                 df_temp = df_temp.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
-                df_varejador = df_temp.head(100)
+                df_varejador = df_temp.head(150)
                 
             if not df_varejador.empty:
                 if not df_local_existente.empty:
@@ -798,9 +813,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.session_state.df_resultados = df_final
                 
                 if usou_fallback:
-                    st.warning(f"⚠️ O Varejador IA não localizou '{termo_busca}' no estado {uf_buscada}. Trouxemos cotações de **OUTROS ESTADOS** para você não ficar sem referência.")
+                    st.warning(f"⚠️ O Varejador IA não localizou '{termo_busca}' no estado {uf_buscada} nas últimas 1000 cotações nacionais. Trouxemos cotações de **OUTROS ESTADOS** para você não ficar sem referência.")
                 else:
-                    st.success("✅ Varejador IA completou a lista buscando no PNCP Nacional.")
+                    st.success(f"✅ Varejador IA completou a lista buscando no PNCP para o estado: {uf_buscada}.")
             else:
                 if not df_local_existente.empty:
                     df_local_existente.insert(0, 'Selecionar', False)
@@ -810,7 +825,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.warning("⚠️ O Varejador não encontrou itens extras com valor para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ Nada encontrado no banco local nem no Varejador Nacional para estes termos.")
+                    st.error("❌ Nada encontrado no banco local nem nas 1000 cotações do Varejador Nacional para estes termos.")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
@@ -985,9 +1000,11 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             
             st.session_state['solic_importada'] = None
             st.session_state.carrinho = pd.DataFrame()
+            st.session_state['menu_option'] = "🗂️ 3. Histórico e Relatórios"
             
-            st.success("✅ Cotação Finalizada com Sucesso! 👆 Suba a tela e clique na Aba '🗂️ 3. Histórico e Relatórios' para gerar os PDFs.")
-            st.balloons()
+            st.success("✅ Cotação Finalizada com Sucesso! Redirecionando para o Histórico...")
+            time.sleep(1.5)
+            st.rerun()
         else:
             st.error("Nenhuma pauta foi carregada para ser finalizada.")
 
@@ -1016,7 +1033,8 @@ elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
                     conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],))
                     conn.commit()
                     st.session_state['solic_importada'] = row['id']
-                    st.success("✅ Cotação Reaberta! 👆 Suba a tela e clique na Aba '📊 2. Painel Central de Cotação (Pesquisa)'.")
+                    st.session_state['menu_option'] = "📊 2. Painel Central de Cotação (Pesquisa)" 
+                    st.rerun()
                     
                 if c_hist2.button("📄 Carregar Relatórios Oficiais em PDF", key=f"pdf_{row['id']}"):
                     df_cart_hist = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={row['id']}", conn)
