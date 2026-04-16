@@ -52,7 +52,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.3 Varejador Geográfico Anti-Afogamento</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.4 Varejador Geográfico Turbinado</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -672,7 +672,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # COFRE DE MEMÓRIA
+                    # COFRE DE MEMÓRIA ATUALIZADO
                     st.session_state['safe_nome_relatorio'] = item_selecionado
                     st.session_state['safe_qtd_relatorio'] = qtd_extraida
                     
@@ -716,30 +716,35 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         
         submit = st.form_submit_button("🔎 Consultar Banco")
 
+    # ==========================================
+    # VAREJADOR IA (BUSCA ESTADUAL APRIMORADA)
+    # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}' em {uf_buscada}..."):
+        with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(1.5) 
             df_varejador = pd.DataFrame()
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36', 'Accept': 'application/json'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json'
+            }
             
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
             palavras = [p for p in remover_acentos(termo_busca).split() if p not in stopwords]
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
-            # O Segredo Geográfico para o Varejador
-            if uf_buscada != "TODAS":
-                termo_url += f"+{uf_buscada}"
-            
             try:
-                url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item"
-                resposta = requests.get(url_api, headers=headers, timeout=15, verify=False)
+                # O Pulo do Gato: Puxa 500 itens globais (tamanhoPagina=500) para depois filtrar
+                url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina=1&tamanhoPagina=500"
+                resposta = requests.get(url_api, headers=headers, timeout=20, verify=False)
                 if resposta.status_code == 200:
                     dados = resposta.json()
                     itens_api = dados.get('items', [])
                     
-                    lista_vars = []
-                    for i, it in enumerate(itens_api[:100]):
+                    lista_vars_estado = []
+                    lista_vars_outros = []
+                    
+                    for i, it in enumerate(itens_api):
                         titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
                         titulo_limpo = remover_acentos(titulo_bruto)
                         
@@ -750,11 +755,37 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                                 uf_api = str(it.get('ufSigla', 'BR')).upper()
                                 orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
                                 
-                                if uf_buscada != "TODAS" and uf_api != uf_buscada:
-                                    continue
+                                item_montado = {
+                                    'descricao_item': titulo_bruto, 
+                                    'unid_medida': 'UN', 
+                                    'valor_unitario': valor_est, 
+                                    'municipio': mun, 
+                                    'estado': uf_api, 
+                                    'credor': f"FONTE: {orgao}", 
+                                    'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
+                                    'id_item': f"VAR-{int(time.time())}-{i}", 
+                                    'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
+                                    'origem': 'VAREJADOR NACIONAL'
+                                }
+                                
+                                # Separação Geográfica Inteligente
+                                if uf_buscada != "TODAS":
+                                    if uf_api == uf_buscada:
+                                        lista_vars_estado.append(item_montado)
+                                    else:
+                                        lista_vars_outros.append(item_montado)
+                                else:
+                                    lista_vars_estado.append(item_montado)
                                     
-                                lista_vars.append({'descricao_item': titulo_bruto, 'unid_medida': 'UN', 'valor_unitario': valor_est, 'municipio': mun, 'estado': uf_api, 'credor': f"FONTE: {orgao}", 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-{int(time.time())}-{i}", 'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 'origem': 'VAREJADOR NACIONAL'})
-                    if lista_vars: df_varejador = pd.DataFrame(lista_vars)
+                    # Lógica de Fallback (Plano B)
+                    usou_fallback = False
+                    if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
+                        lista_vars_estado = lista_vars_outros
+                        usou_fallback = True
+                        
+                    if lista_vars_estado: 
+                        df_varejador = pd.DataFrame(lista_vars_estado[:100]) # Limita a 100 pra não pesar a tela
+                        
             except Exception: pass
                 
             if not df_varejador.empty:
@@ -763,19 +794,24 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                     df_final = pd.concat([df_local_existente, df_varejador], ignore_index=True)
                 else: df_final = df_varejador
+                
                 df_final.insert(0, 'Selecionar', False)
                 st.session_state.df_resultados = df_final
-                st.success(f"✅ Varejador IA completou a lista buscando no PNCP para o estado: {uf_buscada}.")
+                
+                if usou_fallback:
+                    st.warning(f"⚠️ O Varejador IA não localizou '{termo_busca}' no estado {uf_buscada}. Trouxemos cotações de **OUTROS ESTADOS** para você não ficar sem referência.")
+                else:
+                    st.success("✅ Varejador IA completou a lista buscando no PNCP Nacional.")
             else:
                 if not df_local_existente.empty:
                     df_local_existente.insert(0, 'Selecionar', False)
                     df_local_existente['municipio'] = df_local_existente['municipio'].fillna('Não Informado')
                     df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                     st.session_state.df_resultados = df_local_existente
-                    st.warning("⚠️ O Varejador IA não achou correspondência exata nacional.")
+                    st.warning("⚠️ O Varejador não encontrou itens extras com valor para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ Nada encontrado em nenhum estado do Brasil.")
+                    st.error("❌ Nada encontrado no banco local nem no Varejador Nacional para estes termos.")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
@@ -840,9 +876,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
         
-        # BLINDAGEM MÁXIMA DA CAIXA DE TEXTO ACIMA DA TABELA
         st.markdown("#### ⚙️ Configuração do Item para o Carrinho")
         c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
+        
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['safe_nome_relatorio'])
         qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
         
@@ -887,9 +923,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 else:
                     st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
                 
-    # ==========================================
-    # 🔍 PLANILHA DE RAIO-X
-    # ==========================================
     st.divider()
     st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
     if not st.session_state.carrinho.empty:
