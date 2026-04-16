@@ -52,7 +52,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.5 Varejador Desbloqueado com Filtro Silencioso</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.6 O Retorno do Varejador Nacional Original</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -672,6 +672,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
+                    # COFRE DE MEMÓRIA ATUALIZADO
                     st.session_state['safe_nome_relatorio'] = item_selecionado
                     st.session_state['safe_qtd_relatorio'] = qtd_extraida
                     
@@ -716,40 +717,38 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (Filtro Silencioso de Alta Performance)
+    # VAREJADOR IA (BUSCA ESTADUAL APRIMORADA 8.6)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
         with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
-            time.sleep(1.5) 
+            time.sleep(1.0) 
             df_varejador = pd.DataFrame()
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Accept': 'application/json'
             }
             
-            stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
-            palavras = [p for p in remover_acentos(termo_busca).split() if len(p) > 1]
-            if not palavras: return
-            termo_url = urllib.parse.quote_plus(" ".join(palavras))
+            termo_url = urllib.parse.quote_plus(termo_busca.strip())
+            
+            lista_vars_estado = []
+            lista_vars_outros = []
             
             try:
-                # O Segredo: Busca pura sem UF, puxando 500 resultados de uma vez!
-                url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina=1&tamanhoPagina=500"
-                resposta = requests.get(url_api, headers=headers, timeout=20, verify=False)
-                if resposta.status_code == 200:
-                    dados = resposta.json()
-                    itens_api = dados.get('items', [])
+                # O Segredo: O Governo bloqueia "tamanhoPagina=500". O limite é 50!
+                # Vamos varrer as 3 primeiras páginas (150 itens) para não travar a API e pegar bastante dado.
+                for pagina in range(1, 4):
+                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
+                    resposta = requests.get(url_api, headers=headers, timeout=15, verify=False)
                     
-                    lista_vars_estado = []
-                    lista_vars_outros = []
-                    
-                    for i, it in enumerate(itens_api):
-                        titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
-                        titulo_limpo = remover_acentos(titulo_bruto)
+                    if resposta.status_code == 200:
+                        dados = resposta.json()
+                        itens_api = dados.get('items', [])
+                        if not itens_api: break # Acabaram os resultados
                         
-                        if all(p in titulo_limpo for p in palavras):
+                        for i, it in enumerate(itens_api):
                             valor_est = float(it.get('valorUnitarioEstimado', 0))
                             if valor_est > 0:
+                                titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
                                 mun = str(it.get('municipioNome', 'NACIONAL')).upper()
                                 uf_api = str(it.get('ufSigla', 'BR')).upper()
                                 orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
@@ -762,7 +761,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                                     'estado': uf_api, 
                                     'credor': f"FONTE: {orgao}", 
                                     'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
-                                    'id_item': f"VAR-{int(time.time())}-{i}", 
+                                    'id_item': f"VAR-{int(time.time())}-{pagina}-{i}", 
                                     'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
                                     'origem': 'VAREJADOR NACIONAL'
                                 }
@@ -774,17 +773,19 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                                         lista_vars_outros.append(item_montado)
                                 else:
                                     lista_vars_estado.append(item_montado)
-                                    
-                    # Fallback (Plano B)
-                    usou_fallback = False
-                    if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
-                        lista_vars_estado = lista_vars_outros
-                        usou_fallback = True
-                        
-                    if lista_vars_estado: 
-                        df_varejador = pd.DataFrame(lista_vars_estado[:100])
-                        
             except Exception: pass
+                
+            # Fallback (Plano B)
+            usou_fallback = False
+            if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
+                lista_vars_estado = lista_vars_outros
+                usou_fallback = True
+                
+            if lista_vars_estado:
+                # Remove itens duplicados que o Governo as vezes manda
+                df_temp = pd.DataFrame(lista_vars_estado)
+                df_temp = df_temp.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
+                df_varejador = df_temp.head(100)
                 
             if not df_varejador.empty:
                 if not df_local_existente.empty:
