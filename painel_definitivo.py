@@ -48,7 +48,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v7.2 Estabilidade Máxima e Memória Blindada</p>
+    <p class="portal-subtitle">Painel Administrativo | v7.3 Blindagem de Interface e Memória</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -404,7 +404,6 @@ opcoes_menu = ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (
 try: idx_aba = opcoes_menu.index(st.session_state['menu_option'])
 except ValueError: idx_aba = 0
 
-# Rádio atualiza o estado e recarrega de forma limpa, evitando a tela vermelha
 aba_selecionada = st.radio("Escolha o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
 if aba_selecionada != st.session_state['menu_option']:
     st.session_state['menu_option'] = aba_selecionada
@@ -824,6 +823,13 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
 
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
+        
+        # --- BLINDAGEM: CAIXAS DE CONFIGURAÇÃO MOVIDAS PARA CIMA DA TABELA DINÂMICA ---
+        st.markdown("#### ⚙️ Configuração do Item para o Carrinho")
+        c_add1, c_add2 = st.columns([3, 1.5])
+        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", key="nome_relatorio_input")
+        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="qtd_relatorio_input")
+        
         colunas_mostrar = ['Selecionar', 'descricao_item', 'unid_medida', 'valor_unitario', 'municipio', 'estado', 'credor', 'data_assinatura', 'id_item', 'link_pncp', 'origem']
         df_exibicao = st.session_state.df_resultados[colunas_mostrar]
         
@@ -842,11 +848,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             }
         )
         
-        c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", key="nome_relatorio_input")
-        qtd_grupo = c_add2.number_input("📦 Quantidade Final:", step=1.0, key="qtd_relatorio_input")
-        
-        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
+        if st.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
             if not st.session_state['nome_relatorio_input'].strip():
                 st.error("🚨 ERRO: O Nome do Relatório não pode ficar em branco! Preencha a caixa acima antes de adicionar.")
             else:
@@ -858,6 +860,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
                     st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
+                    st.session_state['ultimo_item_selecionado'] = ""
                     salvar_carrinho_no_banco()
                     st.success("✅ Cotações adicionadas com sucesso!")
                     time.sleep(1)
@@ -865,6 +868,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 else:
                     st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
                 
+    # ==========================================
+    # 🔍 PLANILHA DE RAIO-X
+    # ==========================================
     st.divider()
     st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
     if not st.session_state.carrinho.empty:
