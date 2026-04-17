@@ -7,7 +7,6 @@ import os
 import sys
 import urllib.parse
 import urllib3
-import concurrent.futures
 from datetime import datetime
 from io import BytesIO, StringIO
 
@@ -53,7 +52,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.7 O Retorno do Arrastão Nacional Simultâneo</p>
+    <p class="portal-subtitle">Painel Administrativo | v8.8 Varejador Ninja e Memória Blindada</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -83,7 +82,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS (100% INTACTO)
+# 📡 BANCO DE DADOS
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
@@ -673,7 +672,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     
                     qtd_extraida = float(df_itens_imp[df_itens_imp['Produto'] == item_selecionado]['Qtd'].iloc[0])
                     
-                    # COFRE DE MEMÓRIA
+                    # COFRE DE MEMÓRIA ATUALIZADO
                     st.session_state['safe_nome_relatorio'] = item_selecionado
                     st.session_state['safe_qtd_relatorio'] = qtd_extraida
                     
@@ -718,10 +717,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (O ARRASTÃO NACIONAL SIMULTÂNEO v8.7)
+    # VAREJADOR IA (O NINJA NACIONAL v8.8 - SILENCIOSO E FILTRADO)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
+        with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}' em {uf_buscada}..."):
             time.sleep(0.5) 
             df_varejador = pd.DataFrame()
             headers = {
@@ -734,70 +733,71 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
-            # Função que cada robô clone vai rodar
-            def fetch_page(pagina):
-                try:
-                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                    if uf_buscada != "TODAS":
-                        url_api += f"&uf={uf_buscada}&ufs={uf_buscada}"
-                        
-                    resp = requests.get(url_api, headers=headers, timeout=10, verify=False)
-                    if resp.status_code == 200:
-                        return resp.json().get('items', [])
-                except: pass
-                return []
-                
-            itens_api = []
-            
-            # O Segredo do Arrastão: Dispara 20 robôs simultâneos para ler 1000 cotações em menos de 2 segundos!
-            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
-                resultados = executor.map(fetch_page, range(1, 21))
-                for res in resultados:
-                    if res: itens_api.extend(res)
-                    
             lista_vars_estado = []
             lista_vars_outros = []
             
-            for i, it in enumerate(itens_api):
-                valor_est = float(it.get('valorUnitarioEstimado', 0))
-                if valor_est > 0:
-                    titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
-                    titulo_limpo = remover_acentos(titulo_bruto)
+            try:
+                # O Varejador Ninja: Varre até 10 páginas (500 itens) sequencialmente para não ativar o Cloudflare do Governo
+                for pagina in range(1, 11): 
+                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
                     
-                    if all(p in titulo_limpo for p in palavras):
-                        mun = str(it.get('municipioNome', 'NACIONAL')).upper()
-                        uf_api = str(it.get('ufSigla', 'BR')).upper()
-                        orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
+                    if uf_buscada != "TODAS":
+                        # A Infiltração: Tenta usar a chave nativa 'ufs' da API.
+                        resp = requests.get(url_api + f"&ufs={uf_buscada}", headers=headers, timeout=5, verify=False)
+                        # Se a API rejeitar (ex: 400 Bad Request), limpa a chave e usa o filtro do Python
+                        if resp.status_code != 200:
+                            resp = requests.get(url_api, headers=headers, timeout=5, verify=False)
+                    else:
+                        resp = requests.get(url_api, headers=headers, timeout=5, verify=False)
+
+                    if resp.status_code == 200:
+                        dados = resp.json()
+                        itens_api = dados.get('items', [])
+                        if not itens_api: break # Se a página vier vazia, para a varredura
                         
-                        item_montado = {
-                            'descricao_item': titulo_bruto, 
-                            'unid_medida': 'UN', 
-                            'valor_unitario': valor_est, 
-                            'municipio': mun, 
-                            'estado': uf_api, 
-                            'credor': f"FONTE: {orgao}", 
-                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
-                            'id_item': f"VAR-{int(time.time())}-{i}", 
-                            'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
-                            'origem': 'VAREJADOR NACIONAL'
-                        }
-                        
-                        if uf_buscada != "TODAS":
-                            if uf_api == uf_buscada:
-                                lista_vars_estado.append(item_montado)
-                            else:
-                                lista_vars_outros.append(item_montado)
-                        else:
-                            lista_vars_estado.append(item_montado)
-                            
-            # Fallback (Plano B)
+                        for i, it in enumerate(itens_api):
+                            valor_est = float(it.get('valorUnitarioEstimado', 0))
+                            if valor_est > 0:
+                                titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
+                                titulo_limpo = remover_acentos(titulo_bruto)
+                                
+                                if all(p in titulo_limpo for p in palavras):
+                                    mun = str(it.get('municipioNome', 'NACIONAL')).upper()
+                                    uf_api = str(it.get('ufSigla', 'BR')).upper()
+                                    orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
+                                    
+                                    item_montado = {
+                                        'descricao_item': titulo_bruto, 
+                                        'unid_medida': 'UN', 
+                                        'valor_unitario': valor_est, 
+                                        'municipio': mun, 
+                                        'estado': uf_api, 
+                                        'credor': f"FONTE: {orgao}", 
+                                        'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
+                                        'id_item': f"VAR-{int(time.time())}-{pagina}-{i}", 
+                                        'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
+                                        'origem': 'VAREJADOR NACIONAL'
+                                    }
+                                    
+                                    if uf_buscada != "TODAS":
+                                        if uf_api == uf_buscada:
+                                            lista_vars_estado.append(item_montado)
+                                        else:
+                                            lista_vars_outros.append(item_montado)
+                                    else:
+                                        lista_vars_estado.append(item_montado)
+                    else:
+                        break # Se o Governo bloquear o IP (ex: 429 Too Many Requests), para e usa os dados que já pegou
+            except Exception: pass
+                
+            # Lógica de Fallback (Plano B Inteligente)
             usou_fallback = False
             if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
                 lista_vars_estado = lista_vars_outros
                 usou_fallback = True
                 
             if lista_vars_estado:
-                # Remove duplicatas que o Governo costuma mandar no meio das 1000
+                # Remove clones que o Governo costuma mandar duplicado
                 df_temp = pd.DataFrame(lista_vars_estado)
                 df_temp = df_temp.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
                 df_varejador = df_temp.head(150)
@@ -813,9 +813,9 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.session_state.df_resultados = df_final
                 
                 if usou_fallback:
-                    st.warning(f"⚠️ O Varejador IA não localizou '{termo_busca}' no estado {uf_buscada} nas últimas 1000 cotações nacionais. Trouxemos cotações de **OUTROS ESTADOS** para você não ficar sem referência.")
+                    st.warning(f"⚠️ O Varejador IA varreu o Governo mas não localizou '{termo_busca}' no estado {uf_buscada}. Trouxemos cotações de **OUTROS ESTADOS** para você não ficar sem referência.")
                 else:
-                    st.success(f"✅ Varejador IA completou a lista buscando no PNCP para o estado: {uf_buscada}.")
+                    st.success(f"✅ Varejador IA completou o arrastão no PNCP para o estado: {uf_buscada}.")
             else:
                 if not df_local_existente.empty:
                     df_local_existente.insert(0, 'Selecionar', False)
@@ -825,7 +825,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.warning("⚠️ O Varejador não encontrou itens extras com valor para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ Nada encontrado no banco local nem nas 1000 cotações do Varejador Nacional para estes termos.")
+                    st.error("❌ Nada encontrado no banco local nem nas 500 cotações do Varejador Nacional para estes termos.")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
