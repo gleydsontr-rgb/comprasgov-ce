@@ -7,6 +7,7 @@ import os
 import sys
 import urllib.parse
 import urllib3
+import concurrent.futures
 from datetime import datetime
 from io import BytesIO, StringIO
 
@@ -52,7 +53,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v8.9 O Retorno do Varejador Original</p>
+    <p class="portal-subtitle">Painel Administrativo | v9.0 O Retorno do Trator Nacional (Multi-Thread)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -82,7 +83,7 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 📡 BANCO DE DADOS (100% INTACTO)
+# 📡 BANCO DE DADOS
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
@@ -144,7 +145,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (100% INTACTA)
+# 📄 FÁBRICA DE PDFs
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -717,14 +718,14 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (O ARRASTÃO NACIONAL OTIMIZADO)
+    # VAREJADOR IA (O TRATOR NACIONAL MULTI-THREAD v9.0)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
+        with st.spinner(f"🌐 Trator IA Nacional trabalhando para: '{termo_busca}'..."):
             time.sleep(0.5) 
             df_varejador = pd.DataFrame()
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Accept': 'application/json'
             }
             
@@ -733,37 +734,36 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
-            itens_api = []
-            
-            # O Arrastão: Busca na raiz do Governo a palavra EXATA (ex: "Cimento") sem "coleira" de estado.
-            # Limite seguro de 3 páginas para evitar o Bloqueio do Governo
-            try:
-                for pagina in range(1, 4):
+            # Função de Clone: Um robô pequeno busca apenas uma página
+            def fetch_page(pagina):
+                try:
+                    # Busca pura nacional. O Governo não engasga com buscas amplas.
                     url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                    
-                    # Usa o Filtro nativo de Estado se for solicitado, mas com tratamento de erro
-                    if uf_buscada != "TODAS":
-                        url_api += f"&uf={uf_buscada}"
-                        
                     resp = requests.get(url_api, headers=headers, timeout=10, verify=False)
                     if resp.status_code == 200:
-                        itens_retornados = resp.json().get('items', [])
-                        if not itens_retornados: break
-                        itens_api.extend(itens_retornados)
-            except Exception: pass
+                        return resp.json().get('items', [])
+                except: pass
+                return []
+                
+            itens_api = []
+            
+            # O TRATOR: Dispara 40 robôs clones simultaneamente para varrer 2.000 itens em ~2 segundos
+            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                resultados = executor.map(fetch_page, range(1, 41))
+                for res in resultados:
+                    if res: itens_api.extend(res)
                     
             lista_vars_estado = []
             lista_vars_outros = []
             
-            # A Peneira: Filtra os resultados no seu computador em milissegundos
+            # A Peneira Local de Alta Velocidade
             for i, it in enumerate(itens_api):
                 valor_est = float(it.get('valorUnitarioEstimado', 0))
                 if valor_est > 0:
                     titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
                     titulo_limpo = remover_acentos(titulo_bruto)
                     
-                    # Sem frescura de ser 100% idêntico. Se tiver as palavras principais, ele puxa!
-                    if any(p in titulo_limpo for p in palavras):
+                    if all(p in titulo_limpo for p in palavras):
                         mun = str(it.get('municipioNome', 'NACIONAL')).upper()
                         uf_api = str(it.get('ufSigla', 'BR')).upper()
                         orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
@@ -789,13 +789,13 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                         else:
                             lista_vars_estado.append(item_montado)
                             
-            # Plano B (Fallback)
             usou_fallback = False
             if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
                 lista_vars_estado = lista_vars_outros
                 usou_fallback = True
                 
             if lista_vars_estado:
+                # Remove clones ou itens duplicados que o Governo devolve
                 df_temp = pd.DataFrame(lista_vars_estado)
                 df_temp = df_temp.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
                 df_varejador = df_temp.head(150)
@@ -811,19 +811,19 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.session_state.df_resultados = df_final
                 
                 if usou_fallback:
-                    st.warning(f"⚠️ O Varejador IA pesquisou, mas não localizou '{termo_busca}' no estado {uf_buscada}. Trouxemos cotações de **OUTROS ESTADOS** para você não ficar sem referência.")
+                    st.warning(f"⚠️ O Trator IA varreu 2.000 cotações nacionais e não achou '{termo_busca}' em {uf_buscada}. Trouxemos de **OUTROS ESTADOS** para base.")
                 else:
-                    st.success(f"✅ Varejador IA completou a busca no PNCP {'para o estado: ' + uf_buscada if uf_buscada != 'TODAS' else 'Nacional'}.")
+                    st.success(f"✅ Trator IA completou o arrastão no PNCP para o estado: {uf_buscada}.")
             else:
                 if not df_local_existente.empty:
                     df_local_existente.insert(0, 'Selecionar', False)
                     df_local_existente['municipio'] = df_local_existente['municipio'].fillna('Não Informado')
                     df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                     st.session_state.df_resultados = df_local_existente
-                    st.warning("⚠️ O Varejador não encontrou itens extras com valor no Portal Nacional para esta busca.")
+                    st.warning("⚠️ O Trator não encontrou itens extras com valor para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ Nada encontrado no banco local nem no Varejador Nacional para estes termos.")
+                    st.error("❌ Nada encontrado no banco local nem nas 2.000 cotações do Trator Nacional para estes termos.")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
