@@ -54,7 +54,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v12.0 O Varejador "Sangue Puro" Definitivo</p>
+    <p class="portal-subtitle">Painel Administrativo | v13.0 Fusão: Varejador Nacional Integrado ao Motor CE (V69)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -84,27 +84,26 @@ def tratar_texto(texto):
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 🧠 INTELIGÊNCIA CE (Regex do Município)
+# 🧠 INTELIGÊNCIA CE (Importado da V69)
 # ==========================================
-def extrair_municipio_do_texto(texto):
-    if not texto: return None
-    texto_limpo = remover_acentos(texto)
+def extrair_municipio_do_orgao(nome_orgao):
+    if not nome_orgao: return None
     padroes = [
-        r"PREFEITURA(?: MUNICIPAL)? D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"PREFEITURA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"MUNICIPIO D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"CAMARA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"FUNDO MUNICIPAL D[E|O|A|OS|AS]?\s*[A-ZÀ-Ú\s]* D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"CONSELHO ESCOLAR [A-ZÀ-Ú0-9\s]+ D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"SECRETARIA [A-ZÀ-Ú0-9\s]+ D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"\bEM\s+([A-ZÀ-Ú0-9\s]+)[/-]\s*[A-Z]{2}\b", 
-        r"([A-ZÀ-Ú0-9\s]+)[/-]\s*[A-Z]{2}\b" 
+        r"PREFEITURA D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"FUNDO MUNICIPAL DE SAUDE D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"FUNDO MUNICIPAL DE EDUCA[CÇ][AÃ]O D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)"
     ]
+    nome_limpo = remover_acentos(nome_orgao)
     for padrao in padroes:
-        match = re.search(padrao, texto_limpo)
-        if match: 
-            mun = match.group(1).strip().split('-')[0].split('/')[0].strip()
-            mun = re.sub(r"^(NO|NA|EM|PARA|A|DE)\s+", "", mun).strip()
-            if len(mun) < 30 and len(mun) > 2: return mun
+        match = re.search(remover_acentos(padrao), nome_limpo)
+        if match:
+            mun = match.group(1).strip()
+            # Corta se houver traço (Ex: PREFEITURA DE AURORA - CE)
+            mun = mun.split('-')[0].strip()
+            return mun
     return None
 
 # ==========================================
@@ -743,10 +742,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (O TRATOR DE FORÇA BRUTA COM INTELIGÊNCIA CE)
+    # VAREJADOR IA (O TRATOR HÍBRIDO V11 - MOTOR CE INTEGRADO)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Trator IA (Força Bruta Nacional + Motor CE) buscando: '{termo_busca}'..."):
+        with st.spinner(f"🌐 Trator IA (Motor CE Integrado) operando para: '{termo_busca}'..."):
             time.sleep(0.5) 
             df_varejador = pd.DataFrame()
             headers = {
@@ -759,103 +758,146 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
-            # --- 1. A ROTA SANGUE PURO NACIONAL: Puxar 3.000 itens da raiz ---
-            def fetch_page(pagina):
-                try:
-                    # Busca genérica imbatível, o Governo nunca recusa essa.
-                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                    resp = requests.get(url_api, headers=headers, timeout=10, verify=False)
-                    if resp.status_code == 200:
-                        return resp.json().get('items', [])
-                except: pass
-                return []
+            itens_encontrados = []
+            
+            # --- 1. ROTA ESTADUAL (MOTOR CE): Busca Direto nos Contratos da UF ---
+            if uf_buscada != "TODAS":
+                str_ini = dt_ini.strftime('%Y%m%d')
+                str_fim = dt_fim.strftime('%Y%m%d')
+                contratos_alvo = []
                 
-            itens_brutos_nacionais = []
-            
-            # Dispara 30 clones simultâneos para varrer 60 páginas (3.000 cotações)
-            with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
-                resultados = executor.map(fetch_page, range(1, 61))
-                for res in resultados:
-                    if res: itens_brutos_nacionais.extend(res)
+                def fetch_contratos(pagina):
+                    url = f"https://pncp.gov.br/api/consulta/v1/contratos?dataInicial={str_ini}&dataFinal={str_fim}&uf={uf_buscada}&pagina={pagina}&tamanhoPagina=50"
+                    try:
+                        r = requests.get(url, headers=headers, timeout=10, verify=False)
+                        if r.status_code == 200: return r.json().get('data', [])
+                    except: pass
+                    return []
                     
-            lista_vars_estado = []
-            lista_vars_outros = []
-            cache_orgaos = {}
-            
-            # --- 2. O PENTE FINO E A ESCAVAÇÃO (A Inteligência do CE) ---
-            for i, it in enumerate(itens_brutos_nacionais):
-                valor_est = float(it.get('valorUnitarioEstimado', 0))
-                if valor_est > 0:
-                    titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
-                    titulo_limpo = remover_acentos(titulo_bruto)
-                    
-                    # Filtra apenas se o item contiver as palavras que estamos procurando
-                    if all(p in titulo_limpo for p in palavras):
-                        mun = str(it.get('municipioNome', '')).upper()
-                        uf_api = str(it.get('ufSigla', '')).upper()
-                        orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
-                        link_pncp = str(it.get('linkSistemaOrigem', 'https://pncp.gov.br'))
-
-                        # MOTOR CE EM AÇÃO: Se a API for preguiçosa e esconder a UF, a gente arranca o CNPJ e bate na Receita Federal
-                        if uf_buscada != "TODAS" and uf_api in ['', 'NONE', 'NULL', 'ND', 'BR']:
-                            try:
-                                if "/app/editais/" in link_pncp:
-                                    cnpj_compra = link_pncp.split("/app/editais/")[1].split("/")[0]
-                                    if cnpj_compra not in cache_orgaos:
-                                        res_cnpj = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_compra}", timeout=5)
-                                        if res_cnpj.status_code == 200:
-                                            d_cnpj = res_cnpj.json()
-                                            cache_orgaos[cnpj_compra] = (str(d_cnpj.get('uf', '')).upper(), str(d_cnpj.get('municipio', '')).upper())
-                                        else:
-                                            cache_orgaos[cnpj_compra] = ('', '')
+                with concurrent.futures.ThreadPoolExecutor(max_workers=10) as exe:
+                    res_c = exe.map(fetch_contratos, range(1, 6)) # Busca os últimos 250 contratos da UF
+                    for r in res_c:
+                        if r: contratos_alvo.extend(r)
+                        
+                def extrair_itens_do_contrato(contrato):
+                    locais = []
+                    try:
+                        orgao_ent = contrato.get('orgaoEntidade') or {}
+                        orgao = str(orgao_ent.get('razaoSocial', 'Desconhecido')).upper()
+                        cnpj_orgao = orgao_ent.get('cnpj')
+                        ano_c = contrato.get('anoContrato')
+                        seq_c = contrato.get('sequencialContrato')
+                        
+                        if cnpj_orgao and ano_c and seq_c:
+                            url_detalhe = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj_orgao}/contratos/{ano_c}/{seq_c}"
+                            r_det = requests.get(url_detalhe, headers=headers, timeout=10, verify=False)
+                            if r_det.status_code == 200:
+                                matches = re.findall(r'(\d{14})-1-(\d+)/(\d{4})', r_det.text)
+                                if matches:
+                                    cnpj_compra, seq_compra_str, ano_compra = matches[0]
+                                    seq_compra = str(int(seq_compra_str))
+                                    api_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj_compra}/compras/{ano_compra}/{seq_compra}/itens?pagina=1&tamanhoPagina=500"
                                     
-                                    uf_receita, mun_receita = cache_orgaos[cnpj_compra]
-                                    if uf_receita: uf_api = uf_receita
-                                    if not mun or mun in ['NONE', 'NULL', '']: mun = mun_receita
-                            except: pass
+                                    r_it = requests.get(api_itens, headers=headers, timeout=10, verify=False)
+                                    if r_it.status_code == 200:
+                                        json_itens = r_it.json()
+                                        lista_itens = json_itens if isinstance(json_itens, list) else json_itens.get('data', [])
+                                        
+                                        for idx, it in enumerate(lista_itens):
+                                            desc = str(it.get('descricao', '')).upper()
+                                            if all(p in remover_acentos(desc) for p in palavras):
+                                                val = float(it.get('valorUnitarioHomologado') or it.get('valorUnitarioEstimado') or 0.0)
+                                                if val > 0:
+                                                    unid_obj = it.get('unidadeMedida') or {}
+                                                    unid_medida = remover_acentos(unid_obj.get('nome', 'UN') if isinstance(unid_obj, dict) else str(unid_obj))
+                                                    
+                                                    # Extração de município blindada do CE
+                                                    mun = extrair_municipio_do_orgao(orgao) or 'NÃO INFORMADO'
+                                                    
+                                                    locais.append({
+                                                        'descricao_item': desc, 'unid_medida': unid_medida, 'valor_unitario': val,
+                                                        'municipio': mun, 'estado': uf_buscada, 'credor': f"FONTE: {orgao}",
+                                                        'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-CE-{cnpj_compra}-{idx}",
+                                                        'link_pncp': f"https://pncp.gov.br/app/editais/{cnpj_compra}/{ano_compra}/{seq_compra}", 'origem': 'VAREJADOR (MOTOR CE)'
+                                                    })
+                    except: pass
+                    return locais
+                    
+                with concurrent.futures.ThreadPoolExecutor(max_workers=30) as exe:
+                    res_itens = exe.map(extrair_itens_do_contrato, contratos_alvo)
+                    for r in res_itens:
+                        if r: itens_encontrados.extend(r)
                         
-                        # MOTOR CE EM AÇÃO: Se a cidade for desconhecida, aplica o Regex no nome da Prefeitura
-                        if not mun or mun in ['NONE', 'NULL', '', 'NACIONAL']:
-                            mun_txt = extrair_municipio_do_texto(orgao)
-                            if not mun_txt: mun_txt = extrair_municipio_do_texto(titulo_bruto)
-                            if mun_txt: mun = mun_txt
-                        
-                        if not uf_api or uf_api in ['NONE', 'NULL', '']: uf_api = 'BR'
-                        if not mun or mun in ['NONE', 'NULL', '']: mun = 'NACIONAL'
-
-                        item_montado = {
-                            'descricao_item': titulo_bruto, 
-                            'unid_medida': 'UN', 
-                            'valor_unitario': valor_est, 
-                            'municipio': mun, 
-                            'estado': uf_api, 
-                            'credor': f"FONTE: {orgao}", 
-                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
-                            'id_item': f"VAR-{int(time.time())}-{i}", 
-                            'link_pncp': link_pncp, 
-                            'origem': 'VAREJADOR NACIONAL'
-                        }
-                        
-                        # Filtro Geográfico Limpo
-                        if uf_buscada != "TODAS":
-                            if uf_api == uf_buscada:
-                                lista_vars_estado.append(item_montado)
-                            else:
-                                lista_vars_outros.append(item_montado)
-                        else:
-                            lista_vars_estado.append(item_montado)
-                            
-            # --- 3. PLANO B (FALLBACK) ---
+            # --- 2. PLANO B: A ROTA GLOBAL MASSIVA ---
             usou_fallback = False
-            if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
-                lista_vars_estado = lista_vars_outros
-                usou_fallback = True
-                
-            # --- 4. RENDERIZAÇÃO FINAL ---
-            if lista_vars_estado:
-                # Remove itens clonados do Governo
-                df_temp = pd.DataFrame(lista_vars_estado)
-                df_temp = df_temp.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
+            if not itens_encontrados:
+                try:
+                    def fetch_global(pagina):
+                        url_nac = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
+                        r = requests.get(url_nac, headers=headers, timeout=10, verify=False)
+                        return r.json().get('items', []) if r.status_code == 200 else []
+                        
+                    itens_nac_brutos = []
+                    # Dispara 40 clones para varrer 2000 itens globais
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                        res_nac = executor.map(fetch_global, range(1, 41)) 
+                        for r in res_nac:
+                            if r: itens_nac_brutos.extend(r)
+                            
+                    cache_orgaos = {}
+                    for i, it in enumerate(itens_nac_brutos):
+                        valor_est = float(it.get('valorUnitarioEstimado', 0))
+                        if valor_est > 0:
+                            tit = str(it.get('title', '')).upper()
+                            if all(p in remover_acentos(tit) for p in palavras):
+                                uf_it = str(it.get('ufSigla', '')).upper()
+                                org = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
+                                link_pncp = str(it.get('linkSistemaOrigem', 'https://pncp.gov.br'))
+                                
+                                # MOTOR CE: ESCAVAÇÃO NA RECEITA FEDERAL SE O ESTADO ESTIVER VAZIO
+                                if uf_buscada != "TODAS" and (uf_it in ['NONE', 'NULL', 'BR', '']):
+                                    if "/app/editais/" in link_pncp:
+                                        try:
+                                            cnpj_compra = link_pncp.split("/app/editais/")[1].split("/")[0]
+                                            if cnpj_compra not in cache_orgaos:
+                                                res_cnpj = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_compra}", timeout=3)
+                                                if res_cnpj.status_code == 200:
+                                                    cache_orgaos[cnpj_compra] = str(res_cnpj.json().get('uf', 'BR')).upper()
+                                                else: cache_orgaos[cnpj_compra] = 'BR'
+                                            uf_it = cache_orgaos[cnpj_compra]
+                                        except: pass
+                                
+                                mun = extrair_municipio_do_orgao(org) or 'NACIONAL'
+                                
+                                item_montado = {
+                                    'descricao_item': tit, 'unid_medida': 'UN', 'valor_unitario': valor_est,
+                                    'municipio': mun, 'estado': uf_it if uf_it else 'BR', 'credor': f"FONTE: {org}",
+                                    'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-G-{time.time()}-{i}",
+                                    'link_pncp': link_pncp, 'origem': 'VAREJADOR NACIONAL'
+                                }
+                                
+                                if uf_buscada != "TODAS":
+                                    if uf_it == uf_buscada:
+                                        itens_encontrados.append(item_montado)
+                                else:
+                                    itens_encontrados.append(item_montado)
+                                    
+                    # Se mesmo com a Receita Federal não tiver nada da UF, entrega as do Brasil como Base.
+                    if uf_buscada != "TODAS" and not itens_encontrados:
+                        usou_fallback = True
+                        for i, it in enumerate(itens_nac_brutos):
+                            if float(it.get('valorUnitarioEstimado', 0)) > 0 and all(p in remover_acentos(str(it.get('title', '')).upper()) for p in palavras):
+                                itens_encontrados.append({
+                                    'descricao_item': str(it.get('title', '')).upper(), 'unid_medida': 'UN', 'valor_unitario': float(it.get('valorUnitarioEstimado', 0)),
+                                    'municipio': extrair_municipio_do_orgao(str(it.get('orgaoNome', ''))) or 'NACIONAL', 'estado': str(it.get('ufSigla', 'BR')).upper(), 
+                                    'credor': f"FONTE: {str(it.get('orgaoNome', 'ÓRGÃO'))}", 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
+                                    'id_item': f"VAR-F-{i}", 'link_pncp': str(it.get('linkSistemaOrigem', '')), 'origem': 'VAREJADOR (OUTRO ESTADO)'
+                                })
+                except: pass
+
+            # RENDERIZAÇÃO FINAL
+            if itens_encontrados:
+                df_temp = pd.DataFrame(itens_encontrados).drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
                 df_varejador = df_temp.head(150)
                 
             if not df_varejador.empty:
@@ -869,7 +911,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.session_state.df_resultados = df_final
                 
                 if usou_fallback:
-                    st.warning(f"⚠️ O Trator IA varreu 3.000 cotações e não achou '{termo_busca}' na UF {uf_buscada}. Trouxemos de **OUTROS ESTADOS** como referência.")
+                    st.warning(f"⚠️ O Trator IA não achou '{termo_busca}' na UF {uf_buscada}. Trouxemos de **OUTROS ESTADOS** como referência.")
                 else:
                     st.success(f"✅ Trator IA (Motor CE Integrado) extraiu as cotações com sucesso para o estado: {uf_buscada}.")
             else:
@@ -881,7 +923,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     st.warning("⚠️ O Trator não encontrou itens extras para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ Nada encontrado no banco local nem na varredura de 3.000 itens do Trator Nacional para estes termos.")
+                    st.error("❌ Nada encontrado no banco local nem na varredura profunda de 2.000 itens para estes termos.")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
