@@ -53,7 +53,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v14.0 Varejador Estável (Tecnologia V69 - Sequencial Seguro)</p>
+    <p class="portal-subtitle">Painel Administrativo | v15.0 Varejador Estável (Motor V69 Original Restaurado)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -82,30 +82,33 @@ def tratar_texto(texto):
     if not texto: return ""
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
-# A INTELIGÊNCIA DE MUNICÍPIO DA SUA V69
-def extrair_municipio_do_texto(texto):
-    if not texto: return None
-    texto_limpo = remover_acentos(texto)
+# ==========================================
+# 🧠 INTELIGÊNCIA DE EXTRAÇÃO TEXTUAL (Sua V69)
+# ==========================================
+def extrair_municipio_do_orgao(nome_orgao):
+    if not nome_orgao: return None
     padroes = [
-        r"PREFEITURA(?: MUNICIPAL)? D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"PREFEITURA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"MUNICIPIO D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"CAMARA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"FUNDO MUNICIPAL D[E|O|A|OS|AS]?\s*[A-ZÀ-Ú\s]* D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"CONSELHO ESCOLAR [A-ZÀ-Ú0-9\s]+ D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"SECRETARIA [A-ZÀ-Ú0-9\s]+ D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"PREFEITURA D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"FUNDO MUNICIPAL DE SAUDE D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
+        r"FUNDO MUNICIPAL DE EDUCA[CÇ][AÃ]O D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"\bEM\s+([A-ZÀ-Ú0-9\s]+)[/-]\s*[A-Z]{2}\b", 
         r"([A-ZÀ-Ú0-9\s]+)[/-]\s*[A-Z]{2}\b" 
     ]
+    nome_limpo = remover_acentos(nome_orgao)
     for padrao in padroes:
-        match = re.search(padrao, texto_limpo)
-        if match: 
-            mun = match.group(1).strip().split('-')[0].split('/')[0].strip()
+        match = re.search(remover_acentos(padrao), nome_limpo)
+        if match:
+            mun = match.group(1).strip()
+            mun = mun.split('-')[0].split('/')[0].strip()
             mun = re.sub(r"^(NO|NA|EM|PARA|A|DE)\s+", "", mun).strip()
             if len(mun) < 30 and len(mun) > 2: return mun
     return None
 
 # ==========================================
-# 📡 BANCO DE DADOS
+# 📡 BANCO DE DADOS (INTACTO)
 # ==========================================
 def obter_caminho_banco():
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
@@ -167,7 +170,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs
+# 📄 FÁBRICA DE PDFs (INTACTA)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -740,73 +743,115 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (MOTOR V69 - SEQUENCIAL E BLINDADO CONTRA O CLOUDFLARE)
+    # VAREJADOR IA (A SOLUÇÃO DEFINITIVA DA V69 - SEM THREADS)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Varejador IA Seguro (Motor V69) buscando: '{termo_busca}'..."):
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'
-            }
-            
+        with st.spinner(f"🌐 Varejador IA (Motor V69 Original) buscando '{termo_busca}'..."):
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
             palavras = [p for p in remover_acentos(termo_busca).split() if len(p) > 1]
             if not palavras: return
-            termo_url = urllib.parse.quote_plus(" ".join(palavras))
+            
+            str_ini = dt_ini.strftime('%Y%m%d')
+            str_fim = dt_fim.strftime('%Y%m%d')
             
             itens_encontrados = []
             
-            # O SEGREDO DO SEU CÓDIGO V69: Pesquisa sequencial para o Governo não bloquear o seu IP
-            # Vamos ler as 5 primeiras páginas (250 cotações recentes do Brasil)
-            for pagina in range(1, 6):
-                try:
-                    url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                    r = requests.get(url_api, headers=headers, timeout=15, verify=False)
-                    
-                    if r.status_code == 200:
-                        items = r.json().get('items', [])
-                        if not items: break # Se a página vier vazia, para a busca
+            if uf_buscada != "TODAS":
+                # ROTA V69: CONTRATOS DO ESTADO (SEQUENCIAL, SEM THREADS PARA NÃO BLOQUEAR)
+                for pagina in range(1, 11): # 10 páginas = 500 contratos recentes do estado
+                    url_contratos = f"https://pncp.gov.br/api/consulta/v1/contratos?dataInicial={str_ini}&dataFinal={str_fim}&uf={uf_buscada}&pagina={pagina}&tamanhoPagina=50"
+                    try:
+                        res_cont = requests.get(url_contratos, headers=headers, timeout=15, verify=False)
+                        if res_cont.status_code != 200: break
+                        contratos = res_cont.json().get('data', [])
+                        if not contratos: break
                         
-                        for it in items:
-                            valor = float(it.get('valorUnitarioEstimado') or it.get('valorUnitarioHomologado') or 0.0)
-                            if valor > 0:
-                                titulo = str(it.get('title', '')).upper()
-                                titulo_limpo = remover_acentos(titulo)
+                        for contrato in contratos:
+                            orgao_ent = contrato.get('orgaoEntidade') or {}
+                            orgao = str(orgao_ent.get('razaoSocial', 'Desconhecido')).upper()
+                            cnpj_orgao = orgao_ent.get('cnpj')
+                            ano_c = contrato.get('anoContrato')
+                            seq_c = contrato.get('sequencialContrato')
+                            data_ass = contrato.get('dataAssinatura', dt_fim.strftime('%Y-%m-%d'))
+                            if len(data_ass) > 10: data_ass = data_ass[:10]
+                            data_ass_fmt = datetime.strptime(data_ass, '%Y-%m-%d').strftime('%d/%m/%Y')
+                            
+                            municipio = orgao_ent.get('municipio', {}).get('nome', '')
+                            if not municipio or municipio.upper() == 'NÃO INFORMADO' or municipio == 'NULL':
+                                mun_extraido = extrair_municipio_do_orgao(orgao)
+                                municipio = mun_extraido if mun_extraido else 'NÃO INFORMADO'
                                 
-                                # Verifica as palavras-chave usando a lógica ampla do Python
-                                if all(p in titulo_limpo for p in palavras):
-                                    uf_item = str(it.get('ufSigla', 'BR')).upper()
-                                    mun = str(it.get('municipioNome', '')).upper()
-                                    org = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
-                                    
-                                    # INTELIGÊNCIA CE: Limpa e Extrai Município se vier Vazio
-                                    if mun in ['NÃO INFORMADO', 'NONE', 'NULL', '']: 
-                                        mun_ext = extrair_municipio_do_texto(org)
-                                        mun = mun_ext if mun_ext else 'NACIONAL'
+                            if cnpj_orgao and ano_c and seq_c:
+                                url_detalhe = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj_orgao}/contratos/{ano_c}/{seq_c}"
+                                try:
+                                    res_detalhe = requests.get(url_detalhe, headers=headers, timeout=10, verify=False)
+                                    if res_detalhe.status_code == 200:
+                                        matches = re.findall(r'(\d{14})-1-(\d+)/(\d{4})', res_detalhe.text)
+                                        if matches:
+                                            cnpj_compra, seq_compra_str, ano_compra = matches[0]
+                                            seq_compra = str(int(seq_compra_str))
+                                            link_pncp = f"https://pncp.gov.br/app/editais/{cnpj_compra}/{ano_compra}/{seq_compra}"
+                                            api_itens = f"https://pncp.gov.br/api/pncp/v1/orgaos/{cnpj_compra}/compras/{ano_compra}/{seq_compra}/itens?pagina=1&tamanhoPagina=500"
+                                            
+                                            res_itens = requests.get(api_itens, headers=headers, timeout=15, verify=False)
+                                            if res_itens.status_code == 200:
+                                                json_itens = res_itens.json()
+                                                lista_itens = json_itens if isinstance(json_itens, list) else json_itens.get('data', [])
+                                                
+                                                for idx, it in enumerate(lista_itens):
+                                                    desc_bruta = str(it.get('descricao', '')).upper()
+                                                    desc_limpa = remover_acentos(desc_bruta)
+                                                    
+                                                    if all(p in desc_limpa for p in palavras):
+                                                        valor = float(it.get('valorUnitarioHomologado') or it.get('valorUnitarioEstimado') or 0.0)
+                                                        if valor > 0:
+                                                            unid_obj = it.get('unidadeMedida') or {}
+                                                            unid_medida = remover_acentos(unid_obj.get('nome', 'UN') if isinstance(unid_obj, dict) else str(unid_obj))
+                                                            
+                                                            itens_encontrados.append({
+                                                                'descricao_item': desc_bruta, 'unid_medida': unid_medida, 'valor_unitario': valor,
+                                                                'municipio': municipio.upper(), 'estado': uf_buscada, 'credor': f"FONTE: {orgao}",
+                                                                'data_assinatura': data_ass_fmt, 'id_item': f"VAR-{int(time.time())}-{ano_c}-{seq_c}-{idx}",
+                                                                'link_pncp': link_pncp, 'origem': 'VAREJADOR (MOTOR V69)'
+                                                            })
+                                except: pass
+                            time.sleep(0.05) # MAGIA ANTI-BLOQUEIO DO V69
+                    except Exception as e: pass
+            else:
+                # ROTA NACIONAL GERAL: Busca genérica sequencial
+                termo_url_search = urllib.parse.quote_plus(" ".join(palavras))
+                for pagina in range(1, 6):
+                    url_nac = f"https://pncp.gov.br/api/search/?q={termo_url_search}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
+                    try:
+                        res_nac = requests.get(url_nac, headers=headers, timeout=15, verify=False)
+                        if res_nac.status_code == 200:
+                            itens_nac = res_nac.json().get('items', [])
+                            if not itens_nac: break
+                            for i, it in enumerate(itens_nac):
+                                valor = float(it.get('valorUnitarioEstimado', 0))
+                                if valor > 0:
+                                    tit = str(it.get('title', '')).upper()
+                                    if all(p in remover_acentos(tit) for p in palavras):
+                                        mun = str(it.get('municipioNome', 'NACIONAL')).upper()
+                                        uf_it = str(it.get('ufSigla', 'BR')).upper()
+                                        org = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
+                                        link_pncp = str(it.get('linkSistemaOrigem', 'https://pncp.gov.br'))
                                         
-                                    if uf_item in ['NONE', 'NULL', '']:
-                                        uf_item = 'BR'
+                                        if mun in ['NACIONAL', 'NONE', 'NULL', '']:
+                                            mun_txt = extrair_municipio_do_orgao(org)
+                                            if mun_txt: mun = mun_txt
                                         
-                                    # O FILTRO: Só guarda na memória se a UF bater ou for 'TODAS'
-                                    if uf_buscada == "TODAS" or uf_buscada == uf_item:
                                         itens_encontrados.append({
-                                            'descricao_item': titulo,
-                                            'unid_medida': 'UN',
-                                            'valor_unitario': valor,
-                                            'municipio': mun,
-                                            'estado': uf_item,
-                                            'credor': f"FONTE: {org}",
-                                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'),
-                                            'id_item': f"VAR-{int(time.time())}-{len(itens_encontrados)}",
-                                            'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')),
-                                            'origem': 'VAREJADOR NACIONAL'
+                                            'descricao_item': tit, 'unid_medida': 'UN', 'valor_unitario': valor,
+                                            'municipio': mun, 'estado': uf_it, 'credor': f"FONTE: {org}",
+                                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-G-{time.time()}-{i}",
+                                            'link_pncp': link_pncp, 'origem': 'VAREJADOR NACIONAL'
                                         })
-                except Exception as e:
-                    pass
-                
-                # PAUSA OBRIGATÓRIA (Do seu código V69) para o Governo não barrar a conexão
-                time.sleep(0.5) 
-                
-            # RENDERIZAÇÃO NA TELA
+                        time.sleep(0.5) # Pausa para evitar bloqueio
+                    except: pass
+            
+            # --- RENDERIZAÇÃO FINAL ---
             df_varejador = pd.DataFrame()
             if itens_encontrados:
                 df_temp = pd.DataFrame(itens_encontrados).drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
@@ -821,7 +866,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 
                 df_final.insert(0, 'Selecionar', False)
                 st.session_state.df_resultados = df_final
-                st.success(f"✅ Varejador IA completou a varredura com sucesso para o estado: {uf_buscada}.")
+                st.success(f"✅ Varejador IA completou a varredura profunda com sucesso {'para o estado: ' + uf_buscada if uf_buscada != 'TODAS' else 'no Brasil'}.")
                 
             else:
                 if not df_local_existente.empty:
