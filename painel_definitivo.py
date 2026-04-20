@@ -10,6 +10,7 @@ import urllib3
 import concurrent.futures
 from datetime import datetime
 from io import BytesIO, StringIO
+import re
 
 # Desativa alertas chatos de segurança do Governo no console
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -53,7 +54,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v9.0 O Retorno do Trator Nacional (Multi-Thread)</p>
+    <p class="portal-subtitle">Painel Administrativo | v9.2 Varejador Nacional "Escavação Profunda"</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -718,10 +719,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Banco")
 
     # ==========================================
-    # VAREJADOR IA (O TRATOR NACIONAL MULTI-THREAD v9.0)
+    # VAREJADOR IA (V9.2 - ESCAVAÇÃO PROFUNDA COM MULTI-THREAD)
     # ==========================================
     def acionar_varejador(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Trator IA Nacional trabalhando para: '{termo_busca}'..."):
+        with st.spinner(f"🌐 Varejador IA trabalhando para: '{termo_busca}'..."):
             time.sleep(0.5) 
             df_varejador = pd.DataFrame()
             headers = {
@@ -734,68 +735,85 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             if not palavras: return
             termo_url = urllib.parse.quote_plus(" ".join(palavras))
             
-            # Função de Clone: Um robô pequeno busca apenas uma página
             def fetch_page(pagina):
                 try:
-                    # Busca pura nacional. O Governo não engasga com buscas amplas.
+                    # Passo 1: Busca pura nacional (sem UF)
                     url_api = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                    resp = requests.get(url_api, headers=headers, timeout=10, verify=False)
+                    resp = requests.get(url_api, headers=headers, timeout=15, verify=False)
                     if resp.status_code == 200:
-                        return resp.json().get('items', [])
+                        itens_api = resp.json().get('items', [])
+                        resultados_pagina = []
+                        
+                        # Passo 2: O Mergulho (A lógica do Farejador do Ceará aplicada aqui)
+                        for i, it in enumerate(itens_api):
+                            valor_est = float(it.get('valorUnitarioEstimado', 0))
+                            if valor_est > 0:
+                                titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
+                                titulo_limpo = remover_acentos(titulo_bruto)
+                                
+                                if all(p in titulo_limpo for p in palavras):
+                                    mun_superficial = str(it.get('municipioNome', 'NACIONAL')).upper()
+                                    uf_api = str(it.get('ufSigla', 'BR')).upper()
+                                    orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
+                                    link_pncp = str(it.get('linkSistemaOrigem', 'https://pncp.gov.br'))
+                                    
+                                    # Se a busca exige uma UF específica, tenta descobrir a UF real escavando a URL do PNCP
+                                    if uf_buscada != "TODAS" and uf_api != uf_buscada:
+                                         try:
+                                             if "/app/editais/" in link_pncp:
+                                                partes_link = link_pncp.split("/app/editais/")[1].split("/")
+                                                cnpj_compra = partes_link[0]
+                                                # Bate na Receita para checar a verdadeira UF do órgão que comprou
+                                                res_cnpj = requests.get(f"https://brasilapi.com.br/api/cnpj/v1/{cnpj_compra}", timeout=5)
+                                                if res_cnpj.status_code == 200:
+                                                    uf_api = res_cnpj.json().get('uf', uf_api).upper()
+                                         except: pass
+
+                                    item_montado = {
+                                        'descricao_item': titulo_bruto, 
+                                        'unid_medida': 'UN', 
+                                        'valor_unitario': valor_est, 
+                                        'municipio': mun_superficial, 
+                                        'estado': uf_api, 
+                                        'credor': f"FONTE: {orgao}", 
+                                        'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
+                                        'id_item': f"VAR-{int(time.time())}-{pagina}-{i}", 
+                                        'link_pncp': link_pncp, 
+                                        'origem': 'VAREJADOR NACIONAL'
+                                    }
+                                    resultados_pagina.append(item_montado)
+                        return resultados_pagina
                 except: pass
                 return []
                 
-            itens_api = []
+            itens_totais = []
             
-            # O TRATOR: Dispara 40 robôs clones simultaneamente para varrer 2.000 itens em ~2 segundos
+            # O Trator Nacional: Lança 40 threads para ler as últimas 2000 compras
             with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
                 resultados = executor.map(fetch_page, range(1, 41))
                 for res in resultados:
-                    if res: itens_api.extend(res)
+                    if res: itens_totais.extend(res)
                     
             lista_vars_estado = []
             lista_vars_outros = []
             
-            # A Peneira Local de Alta Velocidade
-            for i, it in enumerate(itens_api):
-                valor_est = float(it.get('valorUnitarioEstimado', 0))
-                if valor_est > 0:
-                    titulo_bruto = str(it.get('title', 'ITEM SEM DESCRIÇÃO')).upper()
-                    titulo_limpo = remover_acentos(titulo_bruto)
-                    
-                    if all(p in titulo_limpo for p in palavras):
-                        mun = str(it.get('municipioNome', 'NACIONAL')).upper()
-                        uf_api = str(it.get('ufSigla', 'BR')).upper()
-                        orgao = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
-                        
-                        item_montado = {
-                            'descricao_item': titulo_bruto, 
-                            'unid_medida': 'UN', 
-                            'valor_unitario': valor_est, 
-                            'municipio': mun, 
-                            'estado': uf_api, 
-                            'credor': f"FONTE: {orgao}", 
-                            'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 
-                            'id_item': f"VAR-{int(time.time())}-{i}", 
-                            'link_pncp': str(it.get('linkSistemaOrigem', 'https://pncp.gov.br')), 
-                            'origem': 'VAREJADOR NACIONAL'
-                        }
-                        
-                        if uf_buscada != "TODAS":
-                            if uf_api == uf_buscada:
-                                lista_vars_estado.append(item_montado)
-                            else:
-                                lista_vars_outros.append(item_montado)
-                        else:
-                            lista_vars_estado.append(item_montado)
+            # O Filtro Geográfico Final
+            for item in itens_totais:
+                if uf_buscada != "TODAS":
+                    if item['estado'] == uf_buscada:
+                        lista_vars_estado.append(item)
+                    else:
+                        lista_vars_outros.append(item)
+                else:
+                    lista_vars_estado.append(item)
                             
+            # Plano B Inteligente
             usou_fallback = False
             if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
                 lista_vars_estado = lista_vars_outros
                 usou_fallback = True
                 
             if lista_vars_estado:
-                # Remove clones ou itens duplicados que o Governo devolve
                 df_temp = pd.DataFrame(lista_vars_estado)
                 df_temp = df_temp.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
                 df_varejador = df_temp.head(150)
@@ -811,16 +829,16 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.session_state.df_resultados = df_final
                 
                 if usou_fallback:
-                    st.warning(f"⚠️ O Trator IA varreu 2.000 cotações nacionais e não achou '{termo_busca}' em {uf_buscada}. Trouxemos de **OUTROS ESTADOS** para base.")
+                    st.warning(f"⚠️ O Trator IA varreu 2.000 cotações e não achou '{termo_busca}' na {uf_buscada}. Trouxemos de **OUTROS ESTADOS** para base.")
                 else:
-                    st.success(f"✅ Trator IA completou o arrastão no PNCP para o estado: {uf_buscada}.")
+                    st.success(f"✅ Trator IA completou a varredura profunda no PNCP para o estado: {uf_buscada}.")
             else:
                 if not df_local_existente.empty:
                     df_local_existente.insert(0, 'Selecionar', False)
                     df_local_existente['municipio'] = df_local_existente['municipio'].fillna('Não Informado')
                     df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                     st.session_state.df_resultados = df_local_existente
-                    st.warning("⚠️ O Trator não encontrou itens extras com valor para esta busca.")
+                    st.warning("⚠️ O Trator não encontrou itens extras para esta busca.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
                     st.error("❌ Nada encontrado no banco local nem nas 2.000 cotações do Trator Nacional para estes termos.")
