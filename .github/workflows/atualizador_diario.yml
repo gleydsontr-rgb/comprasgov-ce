@@ -1,4 +1,4 @@
-name: Atualizador Diario do Banco de Precos
+name: Atualizador Diario dos Bancos de Precos
 
 on:
   schedule:
@@ -21,15 +21,18 @@ jobs:
 
       - name: 📦 Instalando as Ferramentas
         run: |
-          pip install requests pandas urllib3
+          pip install requests pandas urllib3 streamlit
 
-      - name: 🐺 Rodando o Robô Invisível
+      - name: 🐺 Rodando o Robô Invisível (Cofre Ceará)
         run: python robo_invisivel.py
 
-      - name: 💾 Salvando o Banco Atualizado na Nuvem
+      - name: 🚜 Rodando o Trator Nacional (Cofre Brasil)
+        run: python robo_nacional.py
+
+      - name: 💾 Salvando os Bancos Atualizados na Nuvem
         run: |
           git config --global user.name "Robo Atualizador"
           git config --global user.email "robo@comprasgov.com"
-          git add banco_compras.db
-          git commit -m "🐺 Atualização diária automática (Robô Invisível)" || exit 0
+          git add banco_compras.db banco_nacional.db
+          git commit -m "🐺🚜 Atualização diária automática (Duplo Cofre)" || exit 0
           git push
