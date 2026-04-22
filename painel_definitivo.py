@@ -53,7 +53,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v18.0 (Duplo Cofre + Busca Estrita Anti-Lixo)</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.0 (Cofres Misturados + Filtro Anti-Lixo)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -80,45 +80,6 @@ def remover_acentos(texto):
 def tratar_texto(texto):
     if not texto: return ""
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
-
-# INTELIGÊNCIA ESTRITA (Impede Cimento de achar Fornecimento)
-def validar_palavras_estritas(texto_limpo, palavras):
-    for p in palavras:
-        # O \b garante que a palavra seja isolada. Se for "FORNECIMENTO", o \bCIMENTO\b vai dar falso.
-        if not re.search(rf'\b{p}\b', texto_limpo):
-            return False
-    return True
-
-# ==========================================
-# 🧠 INTELIGÊNCIA CE (Regex de Município e UF)
-# ==========================================
-def extrair_municipio_do_orgao(nome_orgao):
-    if not nome_orgao: return None
-    padroes = [
-        r"PREFEITURA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"MUNICIPIO D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"CAMARA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"PREFEITURA D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"FUNDO MUNICIPAL DE SAUDE D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"FUNDO MUNICIPAL DE EDUCA[CÇ][AÃ]O D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"\bEM\s+([A-ZÀ-Ú0-9\s]+)[/-]\s*[A-Z]{2}\b", 
-        r"([A-ZÀ-Ú0-9\s]+)[/-]\s*[A-Z]{2}\b" 
-    ]
-    nome_limpo = remover_acentos(nome_orgao)
-    for padrao in padroes:
-        match = re.search(remover_acentos(padrao), nome_limpo)
-        if match:
-            mun = match.group(1).strip()
-            mun = mun.split('-')[0].split('/')[0].strip()
-            mun = re.sub(r"^(NO|NA|EM|PARA|A|DE)\s+", "", mun).strip()
-            if len(mun) < 30 and len(mun) > 2: return mun
-    return None
-
-def extrair_uf_do_orgao(nome_orgao):
-    if not nome_orgao: return None
-    match = re.search(r"[/-]\s*([A-Z]{2})\b", nome_orgao.upper())
-    if match: return match.group(1)
-    return None
 
 # ==========================================
 # 📡 BANCO DE DADOS (DUPLO COFRE LOCAL E NACIONAL)
@@ -316,7 +277,6 @@ else:
 st.sidebar.divider()
 st.sidebar.subheader("🤖 Radar dos Cofres")
 try:
-    # Cofre Local CE
     conn_radar = conectar_banco()
     df_radar = pd.read_sql_query("SELECT COUNT(*) as total, MAX(data_assinatura) as ultima_data FROM itens_compras", conn_radar)
     total_itens = df_radar['total'].iloc[0]
@@ -325,7 +285,6 @@ try:
     
     st.sidebar.write(f"📦 Itens Locais (CE): **{total_itens:,}**".replace(',', '.'))
     
-    # Cofre Nacional
     try:
         conn_nac = conectar_banco_nacional()
         df_nac = pd.read_sql_query("SELECT COUNT(*) as total FROM itens_nacionais", conn_nac)
@@ -636,7 +595,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         submit = st.form_submit_button("🔎 Consultar Bancos de Dados")
 
     # ==========================================
-    # A INTELIGÊNCIA: PLANO B COM FILTRO ANTI-LIXO
+    # A INTELIGÊNCIA: MISTURA TOTAL E FILTRO ANTI-LIXO
     # ==========================================
     if submit:
         st.session_state['search_id'] = str(time.time()) 
@@ -669,9 +628,6 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         query_local = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
         query_nacional = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_nacionais WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
 
-        df_final = pd.DataFrame()
-        usou_nacional = False
-        
         # A MÁGICA DO REGEX: Filtrando Bordas (\b)
         def aplicar_filtro_estrito(df_alvo, texto):
             if not texto or df_alvo.empty: return df_alvo
@@ -683,55 +639,62 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 df_alvo = df_alvo[df_alvo['descricao_item'].str.contains(rf'\b{p}\b', regex=True, na=False)]
             return df_alvo
         
-        with st.spinner("⚡ Acessando os cofres de dados..."):
-            # 1. TENTA O BANCO LOCAL (CE)
+        with st.spinner("⚡ Acessando e combinando os cofres de dados..."):
+            df_local = pd.DataFrame()
+            df_nac = pd.DataFrame()
+            
+            # ABRE OS DOIS COFRES INDEPENDENTE DE QUALQUER COISA
             try:
                 conn_loc = conectar_banco()
                 df_local = pd.read_sql_query(query_local, conn_loc)
                 conn_loc.close()
-                if uf != "TODAS": df_local = df_local[df_local['estado'] == uf]
-            except: df_local = pd.DataFrame()
+            except: pass
             
-            if not df_local.empty:
-                df_final = df_local
-            else:
-                # 2. PLANO B: BANCO NACIONAL
-                usou_nacional = True
-                try:
-                    conn_nac = conectar_banco_nacional()
-                    df_nac = pd.read_sql_query(query_nacional, conn_nac)
-                    conn_nac.close()
-                except: df_nac = pd.DataFrame()
-                
-                if not df_nac.empty:
-                    if uf != "TODAS":
-                        df_nac_uf = df_nac[df_nac['estado'] == uf]
-                        if not df_nac_uf.empty:
-                            df_final = df_nac_uf
-                            usou_nacional = False 
-                        else: df_final = df_nac
-                    else:
-                        df_final = df_nac
-                        usou_nacional = False
+            try:
+                conn_nac = conectar_banco_nacional()
+                df_nac = pd.read_sql_query(query_nacional, conn_nac)
+                conn_nac.close()
+            except: pass
+            
+            # MISTURA TUDO
+            df_combinado = pd.concat([df_local, df_nac], ignore_index=True)
 
-            if not df_final.empty:
-                df_final = df_final.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor', 'link_pncp'])
+            if not df_combinado.empty:
+                df_combinado = df_combinado.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor', 'link_pncp'])
                 
                 # APLICA A INTELIGÊNCIA ANTI-LIXO (Cimento =/= Fornecimento)
-                df_final = aplicar_filtro_estrito(df_final, p1)
-                df_final = aplicar_filtro_estrito(df_final, p2)
-                df_final = aplicar_filtro_estrito(df_final, p3)
+                df_combinado = aplicar_filtro_estrito(df_combinado, p1)
+                df_combinado = aplicar_filtro_estrito(df_combinado, p2)
+                df_combinado = aplicar_filtro_estrito(df_combinado, p3)
                 
-                if not df_final.empty:
-                    df_final.insert(0, 'Selecionar', False)
-                    df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
-                    df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                    st.session_state.df_resultados = df_final.head(150)
+                if not df_combinado.empty:
+                    # AGORA APLICA O FILTRO DA UF QUE O USUÁRIO ESCOLHEU
+                    df_final = pd.DataFrame()
                     
-                    if usou_nacional and uf != "TODAS":
-                        st.warning(f"⚠️ Nenhum item '{p1}' exato registrado para a UF '{uf}' nos bancos. Trouxemos cotações de **OUTROS ESTADOS** do Banco Nacional como base de preço.")
+                    if uf != "TODAS":
+                        df_final = df_combinado[df_combinado['estado'] == uf]
+                        
+                        if not df_final.empty:
+                            df_final.insert(0, 'Selecionar', False)
+                            df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
+                            df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                            st.session_state.df_resultados = df_final.head(150)
+                            st.success(f"⚡ Encontrado! Consulta ultrarrápida concluída para a UF: {uf}.")
+                        else:
+                            # Se ele pediu "SP" e não tem SP, ele mostra o Brasil inteiro como Fallback
+                            df_combinado.insert(0, 'Selecionar', False)
+                            df_combinado['municipio'] = df_combinado['municipio'].fillna('Não Informado')
+                            df_combinado['data_assinatura'] = pd.to_datetime(df_combinado['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                            st.session_state.df_resultados = df_combinado.head(150)
+                            st.warning(f"⚠️ Nenhum item exato registrado para a UF '{uf}'. Trouxemos cotações de **OUTROS ESTADOS**.")
                     else:
-                        st.success(f"⚡ Encontrado! Consulta ultrarrápida nos Bancos de Dados para a UF: {uf}.")
+                        # Se escolheu TODAS, mostra a mistura total de cara
+                        df_final = df_combinado
+                        df_final.insert(0, 'Selecionar', False)
+                        df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
+                        df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                        st.session_state.df_resultados = df_final.head(150)
+                        st.success(f"⚡ Mistura Total concluída! Exibindo cotações de todo o Brasil.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
                     st.error("❌ A palavra foi encontrada, mas não corresponde ao termo exato isolado (Ex: 'cimento' bateu com 'fornecimento'). Tente ajustar a busca.")
@@ -740,7 +703,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.error("❌ Os termos pesquisados não foram encontrados em nenhum dos nossos bancos de dados.")
 
     # ==========================================
-    # RENDERIZAÇÃO DA TABELA (INTACTO)
+    # RENDERIZAÇÃO DA TABELA
     # ==========================================
     if not st.session_state.df_resultados.empty:
         st.info("⚠️ **Atenção:** Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
