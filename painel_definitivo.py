@@ -53,7 +53,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v17.0 Cloud Edition (Busca Direta Anti-Bloqueio)</p>
+    <p class="portal-subtitle">Painel Administrativo | v18.0 (Duplo Cofre + Busca Estrita Anti-Lixo)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -81,6 +81,14 @@ def tratar_texto(texto):
     if not texto: return ""
     return str(texto).encode('latin-1', 'replace').decode('latin-1')
 
+# INTELIGÊNCIA ESTRITA (Impede Cimento de achar Fornecimento)
+def validar_palavras_estritas(texto_limpo, palavras):
+    for p in palavras:
+        # O \b garante que a palavra seja isolada. Se for "FORNECIMENTO", o \bCIMENTO\b vai dar falso.
+        if not re.search(rf'\b{p}\b', texto_limpo):
+            return False
+    return True
+
 # ==========================================
 # 🧠 INTELIGÊNCIA CE (Regex de Município e UF)
 # ==========================================
@@ -107,43 +115,39 @@ def extrair_municipio_do_orgao(nome_orgao):
     return None
 
 def extrair_uf_do_orgao(nome_orgao):
-    # Procura um padrão tipo "- PB" ou "/ AC" no final do nome do órgão
     if not nome_orgao: return None
     match = re.search(r"[/-]\s*([A-Z]{2})\b", nome_orgao.upper())
-    if match:
-        return match.group(1)
+    if match: return match.group(1)
     return None
 
 # ==========================================
-# 📡 BANCO DE DADOS ÚNICO (O SEU DO CEARÁ)
+# 📡 BANCO DE DADOS (DUPLO COFRE LOCAL E NACIONAL)
 # ==========================================
-def obter_caminho_banco():
+def obter_caminho_banco(nome="banco_compras.db"):
     if getattr(sys, 'frozen', False): diretorio_base = os.path.dirname(sys.executable)
     else: diretorio_base = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(diretorio_base, 'banco_compras.db')
+    return os.path.join(diretorio_base, nome)
 
 def conectar_banco():
-    caminho_banco = obter_caminho_banco()
+    caminho_banco = obter_caminho_banco('banco_compras.db')
     conn = sqlite3.connect(caminho_banco, timeout=30.0)
     conn.execute('PRAGMA journal_mode=WAL;')
     cursor = conn.cursor()
-    
     cursor.execute('''CREATE TABLE IF NOT EXISTS solicitacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, secretaria TEXT, data_solic TEXT, status TEXT, numero_solic TEXT, objeto TEXT, secretarias TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS lotes_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_solicitacao INTEGER, nome_lote TEXT, desc_lote TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS itens_solicitacao (id INTEGER PRIMARY KEY AUTOINCREMENT, id_lote INTEGER, id_solicitacao INTEGER, descricao TEXT, unid_medida TEXT, quantidade REAL DEFAULT 1.0)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS itens_compras (id INTEGER PRIMARY KEY AUTOINCREMENT, id_item TEXT, descricao_item TEXT, unid_medida TEXT, valor_unitario REAL, municipio TEXT, estado TEXT, credor TEXT, data_assinatura TEXT, link_pncp TEXT, origem TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS cotacoes_salvas (id_solicitacao INTEGER PRIMARY KEY, dados_json TEXT)''')
     cursor.execute('''CREATE TABLE IF NOT EXISTS configuracoes (id INTEGER PRIMARY KEY AUTOINCREMENT, nome_orgao TEXT, cnpj TEXT, endereco TEXT, contato TEXT, logo BLOB)''')
-    
-    cursor.execute("PRAGMA table_info(solicitacoes)")
-    cols = [col[1] for col in cursor.fetchall()]
-    if 'objeto' not in cols:
-        try: cursor.execute("ALTER TABLE solicitacoes ADD COLUMN objeto TEXT DEFAULT ''")
-        except: pass 
-    if 'secretarias' not in cols:
-        try: cursor.execute("ALTER TABLE solicitacoes ADD COLUMN secretarias TEXT DEFAULT ''")
-        except: pass 
-        
+    conn.commit()
+    return conn
+
+def conectar_banco_nacional():
+    caminho = obter_caminho_banco('banco_nacional.db')
+    conn = sqlite3.connect(caminho, timeout=30.0)
+    conn.execute('PRAGMA journal_mode=WAL;')
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS itens_nacionais (id_item TEXT UNIQUE, estado TEXT, orgao TEXT, municipio TEXT, data_assinatura TEXT, descricao_item TEXT, unid_medida TEXT, valor_unitario REAL, credor TEXT, origem TEXT, link_pncp TEXT)''')
     conn.commit()
     return conn
 
@@ -282,7 +286,7 @@ def gerar_pdf_detalhado_links(df_carrinho, config, processo, objeto):
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 🛒 BARRA LATERAL 
+# 🛒 BARRA LATERAL E RADAR
 # ==========================================
 st.sidebar.title("🛒 Cotações em Andamento")
 
@@ -306,23 +310,44 @@ if not st.session_state.carrinho.empty:
 else:
     st.sidebar.info("O carrinho está vazio. Pesquise e adicione cotações na Aba 2.")
 
+# ==========================================
+# 🤖 RADAR DOS COFRES (COM RAIO-X NACIONAL)
+# ==========================================
 st.sidebar.divider()
-st.sidebar.subheader("🤖 Radar do Banco")
+st.sidebar.subheader("🤖 Radar dos Cofres")
 try:
+    # Cofre Local CE
     conn_radar = conectar_banco()
     df_radar = pd.read_sql_query("SELECT COUNT(*) as total, MAX(data_assinatura) as ultima_data FROM itens_compras", conn_radar)
     total_itens = df_radar['total'].iloc[0]
     ultima_data = df_radar['ultima_data'].iloc[0]
     conn_radar.close()
     
-    if total_itens > 0:
-        st.sidebar.write(f"📦 Itens no Cofre Local: **{total_itens:,}**".replace(',', '.'))
-        st.sidebar.write(f"🔄 Última Captura: **{ultima_data}**")
-        st.sidebar.success("✅ Robô Local Operante na Nuvem.")
-    else:
-        st.sidebar.write("📦 Itens no Cofre: **0**")
-        st.sidebar.warning("⏳ Aguardando ronda do robô.")
-except Exception: pass
+    st.sidebar.write(f"📦 Itens Locais (CE): **{total_itens:,}**".replace(',', '.'))
+    
+    # Cofre Nacional
+    try:
+        conn_nac = conectar_banco_nacional()
+        df_nac = pd.read_sql_query("SELECT COUNT(*) as total FROM itens_nacionais", conn_nac)
+        total_nac = df_nac['total'].iloc[0]
+        
+        st.sidebar.write(f"🌍 Itens Nacionais: **{total_nac:,}**".replace(',', '.'))
+        
+        with st.sidebar.expander("👀 Ver Últimos Itens do Robô Nacional"):
+            if total_nac > 0:
+                df_ultimos = pd.read_sql_query("SELECT descricao_item, estado, valor_unitario FROM itens_nacionais ORDER BY ROWID DESC LIMIT 30", conn_nac)
+                st.dataframe(df_ultimos, use_container_width=True, hide_index=True)
+            else:
+                st.info("O banco nacional ainda está vazio ou atualizando.")
+        conn_nac.close()
+        st.sidebar.success("✅ Duplo Cofre Offline Operante.")
+    except Exception:
+        st.sidebar.write(f"🌍 Itens Nacionais: **0**")
+        st.sidebar.warning("⏳ Banco Nacional não detectado.")
+        
+    st.sidebar.write(f"🔄 Última Captura CE: **{ultima_data}**")
+except Exception:
+    pass
 
 # ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
@@ -377,12 +402,14 @@ if aba_selecionada == "⚙️ 0. Configurações":
 # TELA 1: SOLICITAÇÃO E IMPORTADOR
 # ==========================================
 elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
+    
     c_z1, c_z2 = st.columns([4, 1])
     if c_z2.button("⚠️ Zerar Planejamento (Atenção)"):
         conn = conectar_banco()
         for t in ['solicitacoes', 'lotes_solicitacao', 'itens_solicitacao', 'cotacoes_salvas']:
             conn.execute(f"DROP TABLE IF EXISTS {t}")
-        conn.commit(); conn.close(); conectar_banco()
+        conn.commit(); conn.close()
+        conectar_banco()
         if 'solic_importada' in st.session_state: del st.session_state['solic_importada']
         st.session_state.carrinho = pd.DataFrame()
         st.success("✅ Banco limpo. Pode importar a nova pauta."); st.rerun()
@@ -390,6 +417,7 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
     st.markdown("### 📥 Importação Automática de Pautas Consolidadas")
     with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens", expanded=False):
         arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta", type=["csv", "xlsx"])
+        
         if arquivo_pauta:
             try:
                 if arquivo_pauta.name.endswith('.csv'):
@@ -404,7 +432,8 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     if row.astype(str).str.contains('ESPECIFICAÇÃO', case=False, na=False).any() or row.astype(str).str.contains('LOTE', case=False, na=False).any():
                         idx_header = i; break
                 if idx_header is not None:
-                    df_pauta.columns = df_pauta.iloc[idx_header]; df_pauta = df_pauta.iloc[idx_header+1:].dropna(how='all')
+                    df_pauta.columns = df_pauta.iloc[idx_header]
+                    df_pauta = df_pauta.iloc[idx_header+1:].dropna(how='all')
                 
                 novas_colunas = []
                 for c in df_pauta.columns:
@@ -583,7 +612,7 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
     
     conn.close(); st.divider()
 
-    st.subheader("2. Buscar no Banco do Governo (PNCP)")
+    st.subheader("2. Buscar nos Bancos de Dados Offline")
 
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
@@ -604,107 +633,13 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         relevancia = c11.text_input("Busca Exata (A frase exata precisa estar no texto)")
         ordem = c12.selectbox("Ordenar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
         
-        submit = st.form_submit_button("🔎 Consultar Bancos Offline e Online")
+        submit = st.form_submit_button("🔎 Consultar Bancos de Dados")
 
     # ==========================================
-    # VAREJADOR CLOUD - V17.0 (BUSCA DIRETA ANTI-BLOQUEIO)
+    # A INTELIGÊNCIA: PLANO B COM FILTRO ANTI-LIXO
     # ==========================================
-    def acionar_varejador_nuvem(termo_busca, uf_buscada, df_local_existente):
-        with st.spinner(f"🌐 Varejador Nuvem buscando diretamente a palavra '{termo_busca}'..."):
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36'}
-            stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS', 'SEM']
-            palavras = [p for p in remover_acentos(termo_busca).split() if len(p) > 1]
-            if not palavras: return
-            
-            termo_url = urllib.parse.quote_plus(" ".join(palavras))
-            itens_encontrados = []
-            
-            # ROTA DE BUSCA DIRETA DO GOVERNO (Sem percorrer contratos aleatórios)
-            for pagina in range(1, 6): # Lê 5 páginas = 250 itens exatos sobre o produto no Brasil
-                url_nac = f"https://pncp.gov.br/api/search/?q={termo_url}&tipos_documento=item&pagina={pagina}&tamanhoPagina=50"
-                try:
-                    res_nac = requests.get(url_nac, headers=headers, timeout=15, verify=False)
-                    if res_nac.status_code == 200:
-                        itens_nac = res_nac.json().get('items', [])
-                        if not itens_nac: break
-                        
-                        for i, it in enumerate(itens_nac):
-                            valor = float(it.get('valorUnitarioEstimado') or it.get('valorUnitarioHomologado') or 0.0)
-                            if valor > 0:
-                                tit = str(it.get('title', '')).upper()
-                                # Confirmação da palavra-chave
-                                if all(p in remover_acentos(tit) for p in palavras):
-                                    mun = str(it.get('municipioNome', '')).upper()
-                                    uf_it = str(it.get('ufSigla', '')).upper()
-                                    org = str(it.get('orgaoNome', 'ÓRGÃO NÃO INFORMADO')).upper()
-                                    link_pncp = str(it.get('linkSistemaOrigem', 'https://pncp.gov.br'))
-                                    
-                                    # Corrige estado escondido usando Inteligência Regex da V69
-                                    if uf_it in ['NONE', 'NULL', 'BR', '']:
-                                        uf_ext = extrair_uf_do_orgao(org)
-                                        if uf_ext: uf_it = uf_ext
-                                        else: uf_it = 'BR'
-                                        
-                                    if mun in ['NACIONAL', 'NONE', 'NULL', '']:
-                                        mun_txt = extrair_municipio_do_orgao(org)
-                                        if mun_txt: mun = mun_txt
-                                        else: mun = 'NACIONAL'
-
-                                    itens_encontrados.append({
-                                        'descricao_item': tit, 'unid_medida': 'UN', 'valor_unitario': valor,
-                                        'municipio': mun, 'estado': uf_it, 'credor': f"FONTE: {org}",
-                                        'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"VAR-G-{time.time()}-{i}",
-                                        'link_pncp': link_pncp, 'origem': 'VAREJADOR NACIONAL'
-                                    })
-                    time.sleep(0.5) # Pausa anti-bloqueio Streamlit Cloud
-                except Exception as e: pass
-                    
-            # Filtro e Fallback
-            lista_vars_estado = []
-            lista_vars_outros = []
-            
-            for item in itens_encontrados:
-                if uf_buscada != "TODAS":
-                    if item['estado'] == uf_buscada: lista_vars_estado.append(item)
-                    else: lista_vars_outros.append(item)
-                else: lista_vars_estado.append(item)
-                    
-            usou_fallback = False
-            if uf_buscada != "TODAS" and not lista_vars_estado and lista_vars_outros:
-                lista_vars_estado = lista_vars_outros
-                usou_fallback = True
-                
-            df_varejador = pd.DataFrame()
-            if lista_vars_estado:
-                df_temp = pd.DataFrame(lista_vars_estado).drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor'])
-                df_varejador = df_temp.head(150)
-                
-            if not df_varejador.empty:
-                if not df_local_existente.empty:
-                    df_local_existente['municipio'] = df_local_existente['municipio'].fillna('Não Informado')
-                    df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                    df_final = pd.concat([df_local_existente, df_varejador], ignore_index=True)
-                else: df_final = df_varejador
-                
-                df_final.insert(0, 'Selecionar', False)
-                st.session_state.df_resultados = df_final
-                
-                if usou_fallback: st.warning(f"⚠️ Não achamos '{termo_busca}' na UF {uf_buscada}. Trouxemos de **OUTROS ESTADOS** como referência.")
-                else: st.success(f"✅ Varejador IA extraiu as cotações com sucesso para o estado: {uf_buscada}.")
-            else:
-                if not df_local_existente.empty:
-                    df_local_existente.insert(0, 'Selecionar', False)
-                    df_local_existente['municipio'] = df_local_existente['municipio'].fillna('Não Informado')
-                    df_local_existente['data_assinatura'] = pd.to_datetime(df_local_existente['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                    st.session_state.df_resultados = df_local_existente
-                    st.warning("⚠️ O Varejador não encontrou itens extras para esta busca no momento.")
-                else:
-                    st.session_state.df_resultados = pd.DataFrame()
-                    st.error(f"❌ O termo '{termo_busca}' não foi encontrado no Banco Local nem no Varejador Nacional para a UF: {uf_buscada}.")
-
     if submit:
-        st.session_state['search_id'] = str(time.time()); conn = conectar_banco()
-        query = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0"
+        st.session_state['search_id'] = str(time.time()) 
         
         def aplicar_busca(texto, qry, operador="AND"):
             termo = remover_acentos(texto).strip()
@@ -717,47 +652,98 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                     elif operador == "NOT": qry += f" AND descricao_item NOT LIKE '%{p}%'"
             return qry
 
-        query = aplicar_busca(p1, query); query = aplicar_busca(p2, query); query = aplicar_busca(p3, query); query = aplicar_busca(p_excluir, query, operador="NOT")
-        if relevancia: query += f" AND descricao_item LIKE '%{remover_acentos(relevancia).strip()}%'"
-        if uf != "TODAS": query += f" AND estado = '{uf}'"
-        if val_ini > 0: query += f" AND valor_unitario >= {val_ini}"
-        if val_fim > 0: query += f" AND valor_unitario <= {val_fim}"
-        query += f" AND data_assinatura >= '{dt_ini.strftime('%Y-%m-%d')}' AND data_assinatura <= '{dt_fim.strftime('%Y-%m-%d')}'"
-        if ordem == "MENOR PREÇO": query += " ORDER BY valor_unitario ASC"
-        elif ordem == "MAIOR PREÇO": query += " ORDER BY valor_unitario DESC"
-        else: query += " ORDER BY data_assinatura DESC"
-        query += " LIMIT 1500"
+        filtros = ""
+        filtros = aplicar_busca(p1, filtros)
+        filtros = aplicar_busca(p2, filtros)
+        filtros = aplicar_busca(p3, filtros)
+        filtros = aplicar_busca(p_excluir, filtros, operador="NOT")
+        if relevancia: filtros += f" AND descricao_item LIKE '%{remover_acentos(relevancia).strip()}%'"
+        if val_ini > 0: filtros += f" AND valor_unitario >= {val_ini}"
+        if val_fim > 0: filtros += f" AND valor_unitario <= {val_fim}"
+        filtros += f" AND data_assinatura >= '{dt_ini.strftime('%Y-%m-%d')}' AND data_assinatura <= '{dt_fim.strftime('%Y-%m-%d')}'"
         
-        try:
-            df = pd.read_sql_query(query, conn)
-            if not df.empty:
-                df = df.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor', 'link_pncp'])
-                if p1 and "Inteligente" in modo_busca:
-                    termo_principal = remover_acentos(p1).strip()
-                    stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS']
-                    palavras = [p for p in termo_principal.split() if p not in stopwords]
-                    if palavras:
-                        primeira_palavra = palavras[0]
-                        df = df[df['descricao_item'].str[:40].str.contains(primeira_palavra, na=False)]
-                        for p in palavras[1:]:
-                            if len(p) <= 3: df = df[df['descricao_item'].str.contains(rf'\b{p}\b', regex=True, na=False)]
-                            else: df = df[df['descricao_item'].str.contains(p, na=False)]
-            if not df.empty and len(df) >= 3:
-                df.insert(0, 'Selecionar', False)
-                df['municipio'] = df['municipio'].fillna('Não Informado')
-                df['data_assinatura'] = pd.to_datetime(df['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                st.session_state.df_resultados = df
-                st.success(f"⚡ Encontrado! Consulta ultrarrápida no banco de dados Local para a UF: {uf}.")
+        ordem_sql = " ORDER BY data_assinatura DESC"
+        if ordem == "MENOR PREÇO": ordem_sql = " ORDER BY valor_unitario ASC"
+        elif ordem == "MAIOR PREÇO": ordem_sql = " ORDER BY valor_unitario DESC"
+        
+        query_local = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
+        query_nacional = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_nacionais WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
+
+        df_final = pd.DataFrame()
+        usou_nacional = False
+        
+        # A MÁGICA DO REGEX: Filtrando Bordas (\b)
+        def aplicar_filtro_estrito(df_alvo, texto):
+            if not texto or df_alvo.empty: return df_alvo
+            termo = remover_acentos(texto).strip()
+            stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS']
+            palavras = [p for p in termo.split() if p not in stopwords and len(p) > 1]
+            for p in palavras:
+                # O \b garante que CIMENTO não ache FORNECIMENTO
+                df_alvo = df_alvo[df_alvo['descricao_item'].str.contains(rf'\b{p}\b', regex=True, na=False)]
+            return df_alvo
+        
+        with st.spinner("⚡ Acessando os cofres de dados..."):
+            # 1. TENTA O BANCO LOCAL (CE)
+            try:
+                conn_loc = conectar_banco()
+                df_local = pd.read_sql_query(query_local, conn_loc)
+                conn_loc.close()
+                if uf != "TODAS": df_local = df_local[df_local['estado'] == uf]
+            except: df_local = pd.DataFrame()
+            
+            if not df_local.empty:
+                df_final = df_local
             else:
-                termo_completo = f"{p1} {p2} {p3}".strip()
-                termo_varejo = remover_acentos(termo_completo) if termo_completo else "ITEM"
-                acionar_varejador_nuvem(termo_varejo, uf, df)
+                # 2. PLANO B: BANCO NACIONAL
+                usou_nacional = True
+                try:
+                    conn_nac = conectar_banco_nacional()
+                    df_nac = pd.read_sql_query(query_nacional, conn_nac)
+                    conn_nac.close()
+                except: df_nac = pd.DataFrame()
+                
+                if not df_nac.empty:
+                    if uf != "TODAS":
+                        df_nac_uf = df_nac[df_nac['estado'] == uf]
+                        if not df_nac_uf.empty:
+                            df_final = df_nac_uf
+                            usou_nacional = False 
+                        else: df_final = df_nac
+                    else:
+                        df_final = df_nac
+                        usou_nacional = False
 
-        except Exception as e: st.error(f"Erro no banco: {e}")
-        conn.close()
+            if not df_final.empty:
+                df_final = df_final.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor', 'link_pncp'])
+                
+                # APLICA A INTELIGÊNCIA ANTI-LIXO (Cimento =/= Fornecimento)
+                df_final = aplicar_filtro_estrito(df_final, p1)
+                df_final = aplicar_filtro_estrito(df_final, p2)
+                df_final = aplicar_filtro_estrito(df_final, p3)
+                
+                if not df_final.empty:
+                    df_final.insert(0, 'Selecionar', False)
+                    df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
+                    df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                    st.session_state.df_resultados = df_final.head(150)
+                    
+                    if usou_nacional and uf != "TODAS":
+                        st.warning(f"⚠️ Nenhum item '{p1}' exato registrado para a UF '{uf}' nos bancos. Trouxemos cotações de **OUTROS ESTADOS** do Banco Nacional como base de preço.")
+                    else:
+                        st.success(f"⚡ Encontrado! Consulta ultrarrápida nos Bancos de Dados para a UF: {uf}.")
+                else:
+                    st.session_state.df_resultados = pd.DataFrame()
+                    st.error("❌ A palavra foi encontrada, mas não corresponde ao termo exato isolado (Ex: 'cimento' bateu com 'fornecimento'). Tente ajustar a busca.")
+            else:
+                st.session_state.df_resultados = pd.DataFrame()
+                st.error("❌ Os termos pesquisados não foram encontrados em nenhum dos nossos bancos de dados.")
 
+    # ==========================================
+    # RENDERIZAÇÃO DA TABELA (INTACTO)
+    # ==========================================
     if not st.session_state.df_resultados.empty:
-        st.info("⚠️ **Atenção:** O Governo possui cotações com nomes genéricos (Ex: 'EMBALAGEM 1 KG'). Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
+        st.info("⚠️ **Atenção:** Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
         st.markdown("#### ⚙️ Configuração do Item para o Carrinho"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
         nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['safe_nome_relatorio']); qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
         st.session_state['safe_nome_relatorio'] = nome_grupo; st.session_state['safe_qtd_relatorio'] = qtd_grupo
