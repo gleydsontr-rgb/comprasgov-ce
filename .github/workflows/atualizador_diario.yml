@@ -2,37 +2,36 @@ name: Atualizador Diario dos Bancos de Precos
 
 on:
   schedule:
-    # Roda todos os dias às 03:00 da madrugada
     - cron: '0 3 * * *' 
-  workflow_dispatch: # Botão manual para você testar quando quiser
+  workflow_dispatch:
 
 jobs:
   atualizar-banco:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Clonando o repositório
+      - name: Clonando o repositorio
         uses: actions/checkout@v3
 
-      - name: 🐍 Configurando o Python
+      - name: Configurando o Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: 📦 Instalando as Ferramentas
+      - name: Instalando as Ferramentas
         run: |
           pip install requests pandas urllib3 streamlit
 
-      - name: 🐺 Rodando o Robô Invisível (Cofre Ceará)
+      - name: Rodando o Robo Invisivel CE
         run: python robo_invisivel.py
 
-      - name: 🚜 Rodando o Trator Nacional (Cofre Brasil)
+      - name: Rodando o Trator Nacional
         run: python robo_nacional.py
 
-      - name: 💾 Salvando os Bancos Atualizados na Nuvem
+      - name: Salvando os Bancos Atualizados
         run: |
           git config --global user.name "Robo Atualizador"
           git config --global user.email "robo@comprasgov.com"
           git add banco_compras.db banco_nacional.db
-          git commit -m "🐺🚜 Atualização diária automática (Duplo Cofre)" || exit 0
+          git commit -m "Atualizacao diaria automatica" || exit 0
           git push
