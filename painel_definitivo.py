@@ -28,93 +28,113 @@ except ImportError:
     st.error("⚠️ Atenção: A biblioteca requests não está instalada.")
 
 # ==========================================
-# CONFIGURAÇÃO DA PÁGINA E DESIGN CLÁSSICO
+# CONFIGURAÇÃO DA PÁGINA E DESIGN (ESTILO DR. FISIO)
 # ==========================================
-st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="🟢", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
-    /* Esconde elementos da web do Streamlit */
+    /* Esconde elementos nativos do Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Fundo clássico de sistema Desktop */
-    .stApp { background-color: #E0DFE3; font-family: 'Tahoma', 'Arial', sans-serif; }
+    /* Fundo geral limpo e moderno */
+    .stApp { background-color: #F4F7F6; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
 
-    /* Remove espaços em branco excessivos */
-    .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 98% !important; }
+    /* Ajuste de margens */
+    .block-container { padding-top: 2rem !important; padding-bottom: 2rem !important; max-width: 96% !important; }
 
-    /* Barra de Título tipo Software Clássico */
-    .portal-header {
-        background: linear-gradient(to right, #0A246A, #A6CAF0);
-        color: white;
-        padding: 10px 15px;
-        font-family: 'Tahoma', 'Arial', sans-serif;
-        border: 2px solid #fff;
-        border-bottom-color: #888;
-        border-right-color: #888;
-        margin-top: -20px;
-        margin-bottom: 15px;
+    /* --- O CABEÇALHO SUPERIOR (IDÊNTICO AO DR FISIO) --- */
+    .drfisio-header {
+        background-color: #FFFFFF;
+        border-bottom: 1px solid #E5E7EB;
+        padding: 15px 30px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: -65px;
+        margin-bottom: 25px;
+        margin-left: -3rem;
+        margin-right: -3rem;
     }
-    .portal-title { font-size: 18px; font-weight: bold; margin: 0; padding-bottom: 2px; text-shadow: 1px 1px #000; }
-    .portal-subtitle { font-size: 12px; margin: 0; color: #FFF; }
-
-    /* Textos e Títulos mais sóbrios e menores */
-    h1, h2, h3 { color: #000 !important; font-family: 'Tahoma', 'Arial', sans-serif; font-size: 16px !important; border-bottom: 1px groove #ccc; padding-bottom: 2px; margin-bottom: 10px; margin-top: 10px;}
-    p, span, label { font-family: 'Tahoma', 'Arial', sans-serif; font-size: 13px !important; color: #000 !important; }
-
-    /* Botões com aspecto de botão de Software (Bordas 3D) */
-    .stButton > button {
-        background-color: #ECE9D8 !important;
-        color: #000 !important;
-        border: 2px solid !important;
-        border-top-color: #FFF !important;
-        border-left-color: #FFF !important;
-        border-bottom-color: #716F64 !important;
-        border-right-color: #716F64 !important;
-        border-radius: 0px !important;
-        font-weight: normal !important;
-        padding: 2px 15px !important;
-        box-shadow: none !important;
-    }
-    .stButton > button:active {
-        border-top-color: #716F64 !important;
-        border-left-color: #716F64 !important;
-        border-bottom-color: #FFF !important;
-        border-right-color: #FFF !important;
-        background-color: #D4D0C8 !important;
+    .drfisio-title { color: #6B7280; font-size: 17px; font-weight: 500; margin: 0;}
+    .drfisio-user { color: #374151; font-size: 15px; font-weight: 500; display: flex; align-items: center; gap: 12px;}
+    .user-avatar { 
+        background-color: #1A6B54; 
+        color: white; 
+        width: 36px; 
+        height: 36px; 
+        border-radius: 50%; 
+        display: flex; 
+        justify-content: center; 
+        align-items: center; 
+        font-weight: bold;
+        font-size: 16px;
     }
 
-    /* Caixas de texto com efeito "afundado" */
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="select"] > div,
-    textarea {
-        border: 2px inset #D4D0C8 !important;
-        border-radius: 0px !important;
-        background-color: #FFF !important;
-        box-sizing: border-box !important;
-    }
-    input, textarea, div[data-baseweb="select"] {
-        font-size: 13px !important;
-    }
-
-    /* Sidebar cinza clássica */
+    /* Barra Lateral Branca e Limpa */
     [data-testid="stSidebar"] {
-        background-color: #D4D0C8 !important;
-        border-right: 2px ridge #FFF !important;
+        background-color: #FFFFFF !important;
+        border-right: 1px solid #E5E7EB !important;
     }
     
-    /* Expander tipo painel de controle */
-    .streamlit-expanderHeader {
-        background-color: #ECE9D8 !important;
-        border: 1px solid #716F64 !important;
-        color: #000 !important;
+    /* Textos padrão */
+    h1, h2, h3 { color: #111827 !important; font-weight: 600 !important; font-size: 1.25rem !important; padding-bottom: 8px; border-bottom: 1px solid #E5E7EB; margin-bottom: 15px;}
+    p, span, label { color: #374151 !important; font-size: 0.9rem !important; }
+
+    /* --- CAIXAS DE ENTRADA (INPUTS REDONDOS E MODERNOS) --- */
+    div[data-baseweb="input"] > div, div[data-baseweb="select"] > div, textarea {
+        background-color: #FFFFFF !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 6px !important;
+        box-shadow: none !important;
     }
+    div[data-baseweb="input"]:focus-within > div, div[data-baseweb="select"]:focus-within > div, textarea:focus {
+        border-color: #1A6B54 !important;
+        box-shadow: 0 0 0 1px #1A6B54 !important;
+    }
+
+    /* --- BOTÕES --- */
+    /* Botões Secundários */
+    .stButton > button {
+        border-radius: 6px !important;
+        border: 1px solid #D1D5DB !important;
+        background-color: #FFFFFF !important;
+        color: #374151 !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease-in-out;
+    }
+    .stButton > button:hover { border-color: #1A6B54 !important; color: #1A6B54 !important; }
+
+    /* Botão Primário (O Verde Escuro do Dr Fisio) */
+    button[kind="primary"] {
+        background-color: #1A6B54 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+    }
+    button[kind="primary"]:hover { background-color: #145342 !important; color: white !important;}
+
+    /* Expanders e Formulários como "Cards" Brancos */
+    [data-testid="stForm"], .streamlit-expander {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E5E7EB !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    }
+    .streamlit-expanderHeader { background-color: transparent !important; color: #111827 !important; font-weight: 500 !important; border: none !important;}
+    
+    /* Abas de Navegação (Rádio) - Para parecer um menu limpo */
+    div.row-widget.stRadio > div{ flex-direction:row; background: #FFF; padding: 10px; border-radius: 8px; border: 1px solid #E5E7EB; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    div.row-widget.stRadio > div > label { padding: 5px 15px; }
+
 </style>
-<div class="portal-header">
-    <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.6 Classic Desktop (Correção Margem Logo PDF)</p>
+
+<div class="drfisio-header">
+    <div class="drfisio-title">Sistema de Compras e Cotações Gov</div>
+    <div class="drfisio-user">Olá, Gestor <div class="user-avatar">G</div></div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -129,7 +149,7 @@ keys_to_init = {
     'safe_nome_relatorio': "ITEM DA COTAÇÃO", 'safe_qtd_relatorio': 1.0,
     'input_qtd_internet_form': 1.0,
     'ultimo_item_selecionado': "", 'search_id': "default",
-    'menu_option': "0. Configurações" 
+    'menu_option': "Configurações" 
 }
 for key, value in keys_to_init.items():
     if key not in st.session_state: st.session_state[key] = value
@@ -197,7 +217,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (CORREÇÃO DE MARGEM DO LOGO)
+# 📄 FÁBRICA DE PDFs (INTACTA E CORRIGIDA O MARGEM DO LOGO)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -219,10 +239,7 @@ class RelatorioPDF(FPDF):
         if self.config.get('contato'): self.cell(0, 4, tratar_texto(self.config.get('contato', '')), 0, 1, 'C')
         self.ln(2); self.set_font('Arial', 'B', 10); self.cell(0, 5, tratar_texto(self.tipo_relatorio), 0, 1, 'C')
         self.set_font('Arial', '', 9); self.cell(0, 5, tratar_texto(f"Processo Nº: {self.processo}"), 0, 1, 'C')
-        
-        # PARA-CHOQUE DO LOGO: Garante que a linha e o texto pulem o brasão
         if self.get_y() < 38: self.set_y(38)
-        
         self.line(10, self.get_y() + 2, 200, self.get_y() + 2); self.ln(8)
     def footer(self):
         self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, tratar_texto(f'Página {self.page_no()}'), 0, 0, 'C')
@@ -275,10 +292,7 @@ class RelatorioMapaPDF(FPDF):
         self.ln(2); self.set_font('Arial', 'B', 10)
         if self.is_resumo: self.cell(0, 5, tratar_texto("RESUMO GERAL DO MAPA DE PREÇO"), 0, 1, 'C')
         else: self.cell(0, 5, tratar_texto("MAPA DE PREÇO - DETALHAMENTO POR COLETA"), 0, 1, 'C')
-        
-        # PARA-CHOQUE DO LOGO: Força a começar depois da altura 38
         if self.get_y() < 38: self.set_y(38)
-        
         self.set_font('Arial', 'B', 9); self.cell(0, 5, tratar_texto(f"N°: {self.processo} - DATA: {datetime.now().strftime('%d/%m/%Y')}"), 0, 1, 'L')
         if self.is_resumo: self.multi_cell(0, 5, tratar_texto(f"ESPECIFICAÇÃO/OBJETO: {self.objeto}"))
         self.ln(2)
@@ -330,7 +344,7 @@ def gerar_pdf_detalhado_links(df_carrinho, config, processo, objeto):
 # ==========================================
 # 🛒 BARRA LATERAL E RADAR
 # ==========================================
-st.sidebar.title("🛒 Cotações")
+st.sidebar.title("🛒 Cotações Ativas")
 
 if not st.session_state.carrinho.empty:
     resumo = st.session_state.carrinho.groupby('produto_mapa').agg({'valor_unitario': 'count', 'quantidade': 'max'})
@@ -350,7 +364,7 @@ if not st.session_state.carrinho.empty:
         st.session_state.carrinho = pd.DataFrame()
         salvar_carrinho_no_banco(); st.rerun()
 else:
-    st.sidebar.info("Carrinho vazio.")
+    st.sidebar.info("Carrinho de cotações vazio.")
 
 # ==========================================
 # 🤖 RADAR DOS COFRES
@@ -364,7 +378,7 @@ try:
     ultima_data = df_radar['ultima_data'].iloc[0]
     conn_radar.close()
     
-    st.sidebar.write(f"Itens Locais: **{total_itens:,}**".replace(',', '.'))
+    st.sidebar.write(f"Itens Ceará: **{total_itens:,}**".replace(',', '.'))
     
     try:
         conn_nac = conectar_banco_nacional()
@@ -373,28 +387,28 @@ try:
         
         st.sidebar.write(f"Itens Nacionais: **{total_nac:,}**".replace(',', '.'))
         
-        with st.sidebar.expander("Ver Log do Robô Nacional"):
+        with st.sidebar.expander("Ver Log Nacional"):
             if total_nac > 0:
                 df_ultimos = pd.read_sql_query("SELECT descricao_item, estado, valor_unitario FROM itens_nacionais ORDER BY ROWID DESC LIMIT 30", conn_nac)
                 st.dataframe(df_ultimos, use_container_width=True, hide_index=True)
             else:
-                st.info("O banco nacional ainda está vazio ou atualizando.")
+                st.info("Banco nacional ainda vazio.")
         conn_nac.close()
     except Exception:
         st.sidebar.write(f"Itens Nacionais: **0**")
         
-    st.sidebar.write(f"Ult. Sincronização: **{ultima_data}**")
+    st.sidebar.write(f"Sincronizado: **{ultima_data}**")
 except Exception:
     pass
 
 # ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
-opcoes_menu = ["0. Configurações", "1. Cadastro de Solicitação (Planejamento)", "2. Painel Central de Cotação (Pesquisa)", "3. Histórico e Relatórios"]
+opcoes_menu = ["Configurações", "Cadastro de Pautas", "Painel de Cotação", "Histórico de Relatórios"]
 try: idx_aba = opcoes_menu.index(st.session_state['menu_option'])
 except ValueError: idx_aba = 0
 
-aba_selecionada = st.radio("Selecione o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
+aba_selecionada = st.radio("Menu Principal:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
 if aba_selecionada != st.session_state['menu_option']:
     st.session_state['menu_option'] = aba_selecionada
     st.rerun()
@@ -402,7 +416,7 @@ if aba_selecionada != st.session_state['menu_option']:
 # ==========================================
 # TELA 0: CONFIGURAÇÕES DA ENTIDADE
 # ==========================================
-if aba_selecionada == "0. Configurações":
+if aba_selecionada == "Configurações":
     st.subheader("Configurações da Entidade (Órgão)")
     st.markdown("Os dados preenchidos aqui serão utilizados como cabeçalho em **todos os relatórios PDF** gerados pelo sistema.")
     
@@ -424,7 +438,7 @@ if aba_selecionada == "0. Configurações":
         st.markdown("Logomarca do Órgão")
         logo_file = st.file_uploader("Envie a imagem (Preferência para fundo transparente PNG)", type=['png', 'jpg', 'jpeg'])
         
-        if st.form_submit_button("Salvar Configurações Gerais"):
+        if st.form_submit_button("Salvar Configurações", type="primary"):
             logo_blob = None
             if logo_file is not None: logo_blob = logo_file.read()
             elif not df_cfg.empty and df_cfg['logo'].iloc[0] is not None: logo_blob = df_cfg['logo'].iloc[0]
@@ -439,10 +453,10 @@ if aba_selecionada == "0. Configurações":
 # ==========================================
 # TELA 1: SOLICITAÇÃO E IMPORTADOR
 # ==========================================
-elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
+elif aba_selecionada == "Cadastro de Pautas":
     
     c_z1, c_z2 = st.columns([4, 1])
-    if c_z2.button("Zerar Planejamento (Atenção)"):
+    if c_z2.button("Zerar Base Local (Atenção)"):
         conn = conectar_banco()
         for t in ['solicitacoes', 'lotes_solicitacao', 'itens_solicitacao', 'cotacoes_salvas']:
             conn.execute(f"DROP TABLE IF EXISTS {t}")
@@ -452,7 +466,7 @@ elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
         st.session_state.carrinho = pd.DataFrame()
         st.success("Banco limpo. Pode importar a nova pauta."); st.rerun()
 
-    st.markdown("### Importação Automática de Pautas")
+    st.markdown("### Importação Automática de Planilhas")
     with st.expander("Importar Planilha (Excel/CSV)", expanded=False):
         arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta", type=["csv", "xlsx"])
         
@@ -483,11 +497,11 @@ elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
                     novas_colunas.append(nome_limpo)
                 df_pauta.columns = novas_colunas
                 
-                st.success("Planilha lida com sucesso! Configure a Cotação abaixo:")
+                st.success("Planilha lida com sucesso! Defina a configuração abaixo:")
                 
                 c_capa1, c_capa2 = st.columns(2)
-                nome_solic_auto = c_capa1.text_input("Nome do Arquivo Interno:", value=f"PAUTA CONSOLIDADA - {arquivo_pauta.name.split('.')[0]}")
-                desc_obj = c_capa1.text_area("Objeto da Compra (Para a Capa):", value="AQUISIÇÃO DE MATERIAIS")
+                nome_solic_auto = c_capa1.text_input("Identificação Interna do Arquivo:", value=f"PAUTA - {arquivo_pauta.name.split('.')[0]}")
+                desc_obj = c_capa1.text_area("Objeto da Compra (Para o PDF):", value="AQUISIÇÃO DE MATERIAIS")
                 sec_solic = c_capa2.text_area("Órgãos Solicitantes (Um por linha):", value="SECRETARIA DE ADMINISTRAÇÃO")
                 
                 c_map3, c_map4, c_map5 = st.columns(3)
@@ -501,7 +515,7 @@ elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
                 col_unid = c_map4.selectbox("Coluna da Unidade de Medida:", df_pauta.columns, index=idx_unid)
                 col_qtd = c_map5.selectbox("Coluna da Quantidade TOTAL:", df_pauta.columns, index=idx_total)
                 
-                if st.button("Processar Pauta", type="primary"):
+                if st.button("Processar Planilha e Iniciar", type="primary"):
                     conn = conectar_banco()
                     num_gerado = f"PAUTA-{datetime.now().strftime('%m%d%H%M')}"
                     
@@ -523,38 +537,38 @@ elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
                             except: cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit(); conn.close()
-                    st.success("Pauta importada. Vá para o módulo 2.")
-            except Exception as e: st.error(f"Erro no processamento: {e}")
+                    st.success("Planilha processada. Vá para a aba 'Painel de Cotação'.")
+            except Exception as e: st.error(f"Erro ao ler a planilha: {e}")
 
     st.divider()
 
-    with st.expander("Opção Manual (Inserção de Itens)", expanded=False):
+    with st.expander("Opção Manual (Digitar Itens Um a Um)", expanded=False):
         c_man1, c_man2 = st.columns(2)
-        nome_sec = c_man1.text_input("Identificação do Processo")
-        obj_man = c_man1.text_area("Objeto da Compra (Capa):", value="AQUISIÇÃO DE MATERIAIS")
-        sec_man = c_man2.text_area("Órgãos Solicitantes:", value="SECRETARIA GERAL")
+        nome_sec = c_man1.text_input("Nome da Identificação do Processo")
+        obj_man = c_man1.text_area("Objeto da Compra (PDF):", value="AQUISIÇÃO DE MATERIAIS")
+        sec_man = c_man2.text_area("Órgãos Solicitantes:", value="SECRETARIA DE COMPRAS")
         
-        if st.button("Criar Processo Manual"):
+        if st.button("Criar Processo Manual", type="primary"):
             if nome_sec:
                 num_gerado = f"{datetime.now().strftime('%Y.%m%d%H%M')}"
                 conn = conectar_banco()
                 conn.execute("INSERT INTO solicitacoes (numero_solic, secretaria, data_solic, status, objeto, secretarias) VALUES (?, ?, ?, ?, ?, ?)", 
                              (num_gerado, nome_sec.upper(), datetime.now().strftime('%d/%m/%Y'), 'ABERTA', obj_man.upper(), sec_man.upper()))
-                conn.commit(); conn.close(); st.success(f"Criado!"); st.rerun()
+                conn.commit(); conn.close(); st.success(f"Processo Manual Criado com Sucesso!"); st.rerun()
 
     conn = conectar_banco()
     try: df_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
     except: df_solic = pd.DataFrame() 
     
     if not df_solic.empty:
-        st.markdown("### Visualizar Pauta e Adicionar Itens")
-        solic_selecionada = st.selectbox("Pauta Aberta:", df_solic['id'].astype(str) + " - " + df_solic['secretaria'])
+        st.markdown("### Visualizar Pauta Ativa e Inserir Itens")
+        solic_selecionada = st.selectbox("Selecione a Pauta em Aberto:", df_solic['id'].astype(str) + " - " + df_solic['secretaria'])
         id_solic = int(solic_selecionada.split(" - ")[0])
         
         c_lote, c_item = st.columns(2)
         with c_lote:
             with st.form("form_lote", clear_on_submit=True):
-                nome_lote = st.text_input("Adicionar Lote")
+                nome_lote = st.text_input("Criar Novo Lote")
                 if st.form_submit_button("Salvar Lote"):
                     if nome_lote:
                         conn.execute("INSERT INTO lotes_solicitacao (id_solicitacao, nome_lote, desc_lote) VALUES (?, ?, ?)", (id_solic, nome_lote.upper(), ""))
@@ -566,11 +580,11 @@ elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
                 with st.form("form_item", clear_on_submit=True):
                     lote_selec = st.selectbox("Lote Alvo", df_lotes['id'].astype(str) + " - " + df_lotes['nome_lote'])
                     id_lote = int(lote_selec.split(" - ")[0])
-                    desc_item = st.text_area("Item")
+                    desc_item = st.text_area("Descrição do Novo Item")
                     ci_1, ci_2 = st.columns(2)
-                    unid_item = ci_1.text_input("Un.")
-                    qtd_item = ci_2.number_input("Qtd.", min_value=1.0)
-                    if st.form_submit_button("Inserir Item"):
+                    unid_item = ci_1.text_input("Unidade")
+                    qtd_item = ci_2.number_input("Quantidade", min_value=1.0)
+                    if st.form_submit_button("Salvar Item"):
                         if desc_item and unid_item:
                             try: conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
                             except sqlite3.OperationalError: conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper()))
@@ -588,7 +602,7 @@ elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
 # ==========================================
 # TELA 2: COTAÇÃO E PESQUISA
 # ==========================================
-elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
+elif aba_selecionada == "Painel de Cotação":
     
     st.markdown("### Seleção de Pauta em Andamento")
     conn = conectar_banco()
@@ -597,7 +611,7 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
         
     if not df_todas_solic.empty:
         c_imp1, c_imp2 = st.columns([4, 1])
-        solic_escolhida = c_imp1.selectbox("Pauta Ativa:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
+        solic_escolhida = c_imp1.selectbox("Pauta Ativa para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
         id_solic_imp = int(solic_escolhida.split(" - ")[0])
         
         if c_imp2.button("Carregar Pauta", use_container_width=True):
@@ -625,7 +639,7 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
             st.dataframe(df_itens_imp, use_container_width=True, hide_index=True)
             
             lista_produtos = df_itens_imp['Produto'].tolist()
-            item_selecionado = st.selectbox("Selecione um item da planilha acima para consultar:", [""] + lista_produtos)
+            item_selecionado = st.selectbox("Selecione o Item da Pauta que deseja cotar agora:", [""] + lista_produtos)
             
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
@@ -645,32 +659,32 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 st.rerun() 
                 
             if item_selecionado:
-                st.success(f"Item Alvo: {item_selecionado} | Qtd: {st.session_state['safe_qtd_relatorio']}")
+                st.success(f"Configurado para: {item_selecionado} | Qtd: {st.session_state['safe_qtd_relatorio']}")
     
     conn.close(); st.divider()
 
-    st.markdown("### Busca Central nos Cofres (CE e Nacional)")
+    st.markdown("### Busca Central nos Cofres (Estadual e Nacional)")
 
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
         p1 = c1.text_input("Termo Principal", key="p1_busca_form")
-        p2 = c2.text_input("Contendo também (1)", key="p2_busca_form")
-        p3 = c3.text_input("Contendo também (2)", key="p3_busca_form")
-        p_excluir = c4.text_input("Não pode conter")
+        p2 = c2.text_input("Contendo também (Opcional)", key="p2_busca_form")
+        p3 = c3.text_input("Contendo também (Opcional)", key="p3_busca_form")
+        p_excluir = c4.text_input("Excluir palavras")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
-        modo_busca = c5.selectbox("Tipo de Filtro", ["Ampla (Qualquer parte)", "Inteligente (Início da Descrição)"])
+        modo_busca = c5.selectbox("Tipo de Filtro Inteligente", ["Ampla (Qualquer parte da nota)", "Inteligente (Apenas se iniciar a frase)"])
         dt_ini = c6.date_input("Data inicial", value=datetime(2025, 1, 1), format="DD/MM/YYYY")
         dt_fim = c7.date_input("Data final", format="DD/MM/YYYY")
-        val_ini = c8.number_input("Valor min. (R$)", min_value=0.0, step=1.0)
-        val_fim = c9.number_input("Valor max. (R$)", min_value=0.0, step=1.0)
+        val_ini = c8.number_input("Valor mínimo (R$)", min_value=0.0, step=1.0)
+        val_fim = c9.number_input("Valor máximo (R$)", min_value=0.0, step=1.0)
         
         c10, c11, c12 = st.columns([1.5, 3, 1.5])
-        uf = c10.selectbox("Filtro de UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=15)
-        relevancia = c11.text_input("Frase Exata (Obrigatória no texto)")
-        ordem = c12.selectbox("Classificar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
+        uf = c10.selectbox("Filtro Regional", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=1)
+        relevancia = c11.text_input("Frase Exata (A frase inteira deve estar na nota)")
+        ordem = c12.selectbox("Classificação Padrão", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
         
-        submit = st.form_submit_button("Consultar Base de Dados")
+        submit = st.form_submit_button("Consultar Bases de Dados", type="primary")
 
     if submit:
         st.session_state['search_id'] = str(time.time()) 
@@ -712,7 +726,7 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 df_alvo = df_alvo[df_alvo['descricao_item'].str.contains(rf'\b{p}\b', regex=True, na=False)]
             return df_alvo
         
-        with st.spinner("Lendo base de dados local e nacional..."):
+        with st.spinner("Processando dados corporativos..."):
             df_local = pd.DataFrame()
             df_nac = pd.DataFrame()
             
@@ -747,7 +761,7 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                             st.session_state.df_resultados = df_final.head(150)
                         else:
                             st.session_state.df_resultados = pd.DataFrame()
-                            st.error(f"Nenhum item exato encontrado na UF '{uf}'. Tente alterar a UF para 'TODAS' ou ajustar os termos.")
+                            st.error(f"Nenhuma ocorrência do item na UF '{uf}'. Tente alterar o Filtro Regional para 'TODAS'.")
                     else:
                         df_final = df_combinado
                         df_final.insert(0, 'Selecionar', False)
@@ -756,14 +770,14 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                         st.session_state.df_resultados = df_final.head(150)
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("Termo encontrado, mas retido pelo Filtro Estrito (ex: procurou 'cimento', achou 'fornecimento').")
+                    st.error("Termo bloqueado pelo Filtro de Qualidade Estrito (ex: buscou 'cimento', mas a base só continha 'fornecimento').")
             else:
                 st.session_state.df_resultados = pd.DataFrame()
-                st.error("Nenhum registro encontrado em nenhum dos bancos.")
+                st.error("Nenhum registro localizado nos arquivos offline.")
 
     if not st.session_state.df_resultados.empty:
-        st.markdown("### Preenchimento do Relatório PDF"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("Descrição Oficial do Item:", value=st.session_state['safe_nome_relatorio']); qtd_grupo = c_add2.number_input("Qtd. Total:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
+        st.markdown("### Seleção e Composição da Pauta"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
+        nome_grupo = c_add1.text_input("Descrição Exata do Item para o PDF:", value=st.session_state['safe_nome_relatorio']); qtd_grupo = c_add2.number_input("Quantidade Referência:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
         st.session_state['safe_nome_relatorio'] = nome_grupo; st.session_state['safe_qtd_relatorio'] = qtd_grupo
         
         colunas_mostrar = ['Selecionar', 'descricao_item', 'unid_medida', 'valor_unitario', 'municipio', 'estado', 'credor', 'data_assinatura', 'id_item', 'link_pncp', 'origem']
@@ -771,10 +785,10 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
         chave_dinamica = f"editor_busca_{st.session_state.get('search_id', 'default')}"
         df_editado = st.data_editor(
             df_exibicao, key=chave_dinamica, use_container_width=True, hide_index=True, height=350,
-            column_config={"Selecionar": st.column_config.CheckboxColumn("X", required=True), "descricao_item": st.column_config.TextColumn("Descrição da Nota", width="large"), "valor_unitario": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), "data_assinatura": st.column_config.TextColumn("Data", width="small"), "id_item": None, "origem": None, "link_pncp": st.column_config.LinkColumn("Edital", display_text="Visualizar")}
+            column_config={"Selecionar": st.column_config.CheckboxColumn("Sel", required=True), "descricao_item": st.column_config.TextColumn("Especificação Registrada", width="large"), "valor_unitario": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), "data_assinatura": st.column_config.TextColumn("Data", width="small"), "id_item": None, "origem": None, "link_pncp": st.column_config.LinkColumn("Documento Base", display_text="Acessar Fonte")}
         )
         
-        if c_add3.button("INCLUIR COTAÇÕES", type="primary", use_container_width=True):
+        if c_add3.button("SALVAR SELEÇÃO NO CARRINHO", type="primary", use_container_width=True):
             if not st.session_state['safe_nome_relatorio'].strip(): st.error("Insira o nome oficial do relatório.")
             else:
                 selecionados = df_editado[df_editado['Selecionar'] == True].copy()
@@ -783,66 +797,62 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                     selecionados['produto_mapa'] = remover_acentos(st.session_state['safe_nome_relatorio']).strip(); selecionados['quantidade'] = float(st.session_state['safe_qtd_relatorio']) 
                     selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
                     st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
-                    
-                    # --- APAGADOR DE MEMÓRIA E REINÍCIO DA TABELA ---
                     st.session_state.df_resultados['Selecionar'] = False
                     st.session_state['search_id'] = str(time.time())
-                    # ------------------------------------------------
-                    
-                    st.session_state['ultimo_item_selecionado'] = ""; salvar_carrinho_no_banco(); st.success("Incluído!"); time.sleep(1); st.rerun()
-                else: st.warning("Marque o 'X' na tabela.")
+                    st.session_state['ultimo_item_selecionado'] = ""; salvar_carrinho_no_banco(); st.success("Cotações incluídas com sucesso na sua pauta."); time.sleep(1); st.rerun()
+                else: st.warning("Por favor, selecione as cotações desejadas utilizando a caixa na primeira coluna.")
                 
-    st.divider(); st.markdown("### Resumo do Mapa de Preços")
+    st.divider(); st.markdown("### Visualização Prévia do Mapa de Preços")
     if not st.session_state.carrinho.empty:
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
-        st.dataframe(df_raiox, use_container_width=True, hide_index=True, height=300, column_config={"produto_mapa": st.column_config.TextColumn("Grupo PDF", width="medium"), "descricao_item": st.column_config.TextColumn("Descrição", width="large"), "credor": "Fornecedor", "valor_unitario": st.column_config.NumberColumn("Valor Un.", format="R$ %.2f"), "origem": "Fonte"})
-    else: st.info("Vazio.")
+        st.dataframe(df_raiox, use_container_width=True, hide_index=True, height=300, column_config={"produto_mapa": st.column_config.TextColumn("Identificação do PDF", width="medium"), "descricao_item": st.column_config.TextColumn("Detalhamento da Nota Fiscal", width="large"), "credor": "Pessoa Jurídica / Fornecedor", "valor_unitario": st.column_config.NumberColumn("Custo Unit.", format="R$ %.2f"), "origem": "Base de Dados"})
+    else: st.info("Carrinho ocioso no momento.")
 
-    st.divider(); st.markdown("### Cotação Avulsa (Internet)")
+    st.divider(); st.markdown("### Inserção de Cotações Externas (Manual Web)")
     with st.form("form_internet"):
-        c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1]); desc_int = c_int1.text_input("Descrição Web"); unid_int = c_int2.text_input("Un."); qtd_int = c_int5.number_input("Qtd.", step=1.0, key="input_qtd_internet_form") 
-        c_int3, c_int4 = st.columns([2, 1]); forn_int = c_int3.text_input("Fornecedor / CNPJ"); val_int = c_int4.number_input("Valor Final (R$)", min_value=0.0, step=0.1); link_int = st.text_input("URL")
-        if st.form_submit_button("Inserir no Carrinho"):
+        c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1]); desc_int = c_int1.text_input("Especificação Web"); unid_int = c_int2.text_input("UN."); qtd_int = c_int5.number_input("QTD.", step=1.0, key="input_qtd_internet_form") 
+        c_int3, c_int4 = st.columns([2, 1]); forn_int = c_int3.text_input("Razão Social da Loja / CNPJ"); val_int = c_int4.number_input("Custo Total com Frete (R$)", min_value=0.0, step=0.1); link_int = st.text_input("Link de Acesso")
+        if st.form_submit_button("Inserir Registro"):
             if desc_int and forn_int and val_int > 0:
-                novo_item = pd.DataFrame([{'descricao_item': remover_acentos(desc_int), 'produto_mapa': remover_acentos(desc_int).strip(), 'unid_medida': remover_acentos(unid_int), 'valor_unitario': float(val_int), 'municipio': 'LOJA VIRTUAL', 'estado': '-', 'credor': forn_int.upper(), 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"INT-{time.time()}", 'link_pncp': link_int, 'origem': 'INTERNET', 'quantidade': float(qtd_int)}])
-                st.session_state.carrinho = pd.concat([st.session_state.carrinho, novo_item], ignore_index=True); salvar_carrinho_no_banco(); st.success("Salvo!")
-            else: st.error("Dados incompletos.")
+                novo_item = pd.DataFrame([{'descricao_item': remover_acentos(desc_int), 'produto_mapa': remover_acentos(desc_int).strip(), 'unid_medida': remover_acentos(unid_int), 'valor_unitario': float(val_int), 'municipio': 'PESQUISA DE MERCADO', 'estado': '-', 'credor': forn_int.upper(), 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"INT-{time.time()}", 'link_pncp': link_int, 'origem': 'INTERNET', 'quantidade': float(qtd_int)}])
+                st.session_state.carrinho = pd.concat([st.session_state.carrinho, novo_item], ignore_index=True); salvar_carrinho_no_banco(); st.success("Registro de internet adicionado.")
+            else: st.error("Formulário incompleto.")
                 
-    st.divider(); st.markdown("### Fechamento de Processo")
-    if st.button("Finalizar e Arquivar Pauta", type="primary", use_container_width=True):
+    st.divider(); st.markdown("### Encerramento Operacional")
+    if st.button("Finalizar Pauta e Emitir Relatórios Oficiais", type="primary", use_container_width=True):
         if 'solic_importada' in st.session_state and st.session_state['solic_importada'] is not None:
             id_imp = st.session_state['solic_importada']
             conn = conectar_banco(); conn.execute("UPDATE solicitacoes SET status='FINALIZADA', data_solic=? WHERE id=?", (datetime.now().strftime('%d/%m/%Y %H:%M'), id_imp)); conn.commit(); conn.close()
-            st.session_state['solic_importada'] = None; st.session_state.carrinho = pd.DataFrame(); st.session_state['menu_option'] = "3. Histórico e Relatórios"
+            st.session_state['solic_importada'] = None; st.session_state.carrinho = pd.DataFrame(); st.session_state['menu_option'] = "Histórico de Relatórios"
             time.sleep(0.5); st.rerun()
 
 # ==========================================
 # TELA 3: HISTÓRICO E RELATÓRIOS
 # ==========================================
-elif aba_selecionada == "3. Histórico e Relatórios":
-    st.subheader("Processos Concluídos e Relatórios Oficiais")
+elif aba_selecionada == "Histórico de Relatórios":
+    st.subheader("Processos Concluídos e Documentação em PDF")
     conn = conectar_banco()
     try: df_hist = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='FINALIZADA' ORDER BY id DESC", conn)
     except: df_hist = pd.DataFrame()
         
-    if df_hist.empty: st.info("Arquivo vazio.")
+    if df_hist.empty: st.info("Nenhuma pauta foi consolidada neste ambiente.")
     else:
         for _, row in df_hist.iterrows():
-            with st.expander(f"Processo: {row['numero_solic']} | Concluído: {row['data_solic']}"):
+            with st.expander(f"Processo Operacional: {row['numero_solic']} | Despachado em: {row['data_solic']}"):
                 st.write(row['secretarias']); c_hist1, c_hist2 = st.columns(2)
-                if c_hist1.button("Reabrir Processo", key=f"edit_{row['id']}"):
-                    conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],)); conn.commit(); st.session_state['solic_importada'] = row['id']; st.session_state['menu_option'] = "2. Painel Central de Cotação (Pesquisa)"; st.rerun()
-                if c_hist2.button("Processar PDFs", key=f"pdf_{row['id']}"):
+                if c_hist1.button("Reabrir Pauta", key=f"edit_{row['id']}"):
+                    conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],)); conn.commit(); st.session_state['solic_importada'] = row['id']; st.session_state['menu_option'] = "Painel de Cotação"; st.rerun()
+                if c_hist2.button("Processar Documentação", key=f"pdf_{row['id']}", type="primary"):
                     df_cart_hist = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={row['id']}", conn)
                     if not df_cart_hist.empty and df_cart_hist['dados_json'].iloc[0]:
                         df_print = pd.read_json(StringIO(df_cart_hist['dados_json'].iloc[0]), orient='records'); config_entidade = get_config_entidade(); lista_sec = row['secretarias'].split('\n')
                         st.session_state[f'pdf_capa_{row["id"]}'] = gerar_pdf_capa(config_entidade, row['numero_solic'], row['objeto'], lista_sec); st.session_state[f'pdf_mapa_{row["id"]}'] = gerar_pdf_mapa(df_print, config_entidade, row['numero_solic'], row['objeto']); st.session_state[f'pdf_pncp_{row["id"]}'] = gerar_pdf_detalhado_pncp(df_print, config_entidade, row['numero_solic'], row['objeto']); st.session_state[f'pdf_link_{row["id"]}'] = gerar_pdf_detalhado_links(df_print, config_entidade, row['numero_solic'], row['objeto'])
-                    else: st.error("Sem dados.")
+                    else: st.error("Base de dados fragmentada.")
                         
                 if f'pdf_capa_{row["id"]}' in st.session_state:
                     dl1, dl2, dl3, dl4 = st.columns(4)
-                    dl1.download_button("CAPA", st.session_state[f'pdf_capa_{row["id"]}'], f"Capa_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_capa_{row['id']}")
-                    dl2.download_button("MAPA DE PREÇO", st.session_state[f'pdf_mapa_{row["id"]}'], f"Mapa_{row['numero_solic']}.pdf", "application/pdf", type="primary", key=f"dl_mapa_{row['id']}")
-                    dl3.download_button("DETALHAMENTO PNCP", st.session_state[f'pdf_pncp_{row["id"]}'], f"PNCP_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_pncp_{row['id']}")
+                    dl1.download_button("CAPA OFICIAL", st.session_state[f'pdf_capa_{row["id"]}'], f"Capa_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_capa_{row['id']}")
+                    dl2.download_button("MAPA DE PREÇO (OFICIAL)", st.session_state[f'pdf_mapa_{row["id"]}'], f"Mapa_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_mapa_{row['id']}")
+                    dl3.download_button("DETALHAMENTO GOV", st.session_state[f'pdf_pncp_{row["id"]}'], f"PNCP_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_pncp_{row['id']}")
                     dl4.download_button("DETALHAMENTO WEB", st.session_state[f'pdf_link_{row["id"]}'], f"WEB_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_link_{row['id']}")
     conn.close()
