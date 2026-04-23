@@ -28,32 +28,89 @@ except ImportError:
     st.error("⚠️ Atenção: A biblioteca requests não está instalada.")
 
 # ==========================================
-# CONFIGURAÇÃO DA PÁGINA E DESIGN
+# CONFIGURAÇÃO DA PÁGINA E DESIGN CLÁSSICO (TIPO DESKTOP)
 # ==========================================
 st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
 st.markdown("""
 <style>
+    /* Esconde elementos da web do Streamlit */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    .stApp { background-color: #f4f6f9; }
+    header {visibility: hidden;}
+
+    /* Fundo clássico de sistema Desktop (Cinza corporativo) */
+    .stApp { background-color: #E0DFE3; font-family: 'Tahoma', 'Arial', sans-serif; }
+
+    /* Remove espaços em branco excessivos (Típico de web) para caber mais dados */
+    .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 98% !important; }
+
+    /* Barra de Título tipo Software Clássico (Azul Escuro Estilo Windows) */
     .portal-header {
-        background-color: #003366; 
+        background: linear-gradient(to right, #0A246A, #A6CAF0);
         color: white;
-        padding: 15px 20px;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        border-bottom: 5px solid #F2A900; 
-        margin-top: -40px; 
-        margin-bottom: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        padding: 4px 10px;
+        font-family: 'Tahoma', 'Arial', sans-serif;
+        border: 2px solid #fff;
+        border-bottom-color: #888;
+        border-right-color: #888;
+        margin-top: -50px;
+        margin-bottom: 10px;
     }
-    .portal-title { font-size: 26px; font-weight: 800; margin: 0; letter-spacing: 1px; }
-    .portal-subtitle { font-size: 13px; font-weight: 400; color: #d1e0e0; margin-top: 2px; }
-    h1, h2, h3 { color: #003366 !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .portal-title { font-size: 15px; font-weight: bold; margin: 0; letter-spacing: 0px; text-shadow: 1px 1px #000; }
+    .portal-subtitle { font-size: 11px; margin-top: 0px; color: #FFF; }
+
+    /* Textos e Títulos mais sóbrios e menores */
+    h1, h2, h3 { color: #000 !important; font-family: 'Tahoma', 'Arial', sans-serif; font-size: 16px !important; border-bottom: 1px groove #ccc; padding-bottom: 2px; margin-bottom: 10px; margin-top: 10px;}
+    p, span, label { font-family: 'Tahoma', 'Arial', sans-serif; font-size: 13px !important; color: #000 !important; }
+
+    /* Botões com aspecto de botão de Software (Bordas 3D) */
+    .stButton > button {
+        background-color: #ECE9D8 !important;
+        color: #000 !important;
+        border: 2px solid !important;
+        border-top-color: #FFF !important;
+        border-left-color: #FFF !important;
+        border-bottom-color: #716F64 !important;
+        border-right-color: #716F64 !important;
+        border-radius: 0px !important;
+        font-weight: normal !important;
+        padding: 2px 15px !important;
+        box-shadow: none !important;
+    }
+    .stButton > button:active {
+        border-top-color: #716F64 !important;
+        border-left-color: #716F64 !important;
+        border-bottom-color: #FFF !important;
+        border-right-color: #FFF !important;
+        background-color: #D4D0C8 !important;
+    }
+
+    /* Caixas de texto com efeito "afundado" (Inset) */
+    .stTextInput > div > div > input, .stNumberInput > div > div > input, .stTextArea > div > textarea, .stSelectbox > div > div {
+        border: 2px inset #D4D0C8 !important;
+        border-radius: 0px !important;
+        background-color: #FFF !important;
+        font-size: 13px !important;
+        padding: 4px !important;
+    }
+
+    /* Sidebar cinza clássica */
+    [data-testid="stSidebar"] {
+        background-color: #D4D0C8 !important;
+        border-right: 2px ridge #FFF !important;
+    }
+    
+    /* Expander tipo painel de controle */
+    .streamlit-expanderHeader {
+        background-color: #ECE9D8 !important;
+        border: 1px solid #716F64 !important;
+        color: #000 !important;
+    }
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.0 (Cofres Misturados + Filtro Anti-Lixo)</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.1 Classic Desktop Edition</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -68,7 +125,7 @@ keys_to_init = {
     'safe_nome_relatorio': "ITEM DA COTAÇÃO", 'safe_qtd_relatorio': 1.0,
     'input_qtd_internet_form': 1.0,
     'ultimo_item_selecionado': "", 'search_id': "default",
-    'menu_option': "⚙️ 0. Configurações" 
+    'menu_option': "0. Configurações" 
 }
 for key, value in keys_to_init.items():
     if key not in st.session_state: st.session_state[key] = value
@@ -249,33 +306,33 @@ def gerar_pdf_detalhado_links(df_carrinho, config, processo, objeto):
 # ==========================================
 # 🛒 BARRA LATERAL E RADAR
 # ==========================================
-st.sidebar.title("🛒 Cotações em Andamento")
+st.sidebar.title("🛒 Cotações")
 
 if not st.session_state.carrinho.empty:
     resumo = st.session_state.carrinho.groupby('produto_mapa').agg({'valor_unitario': 'count', 'quantidade': 'max'})
-    st.sidebar.success(f"**{len(resumo)}** grupos de produtos no carrinho.")
+    st.sidebar.success(f"**{len(resumo)}** grupos no carrinho.")
     st.sidebar.divider()
-    st.sidebar.subheader("⚙️ Gerenciar Carrinho")
+    st.sidebar.subheader("Gerenciar Carrinho")
     
     lista_itens_carrinho = [i for i in st.session_state.carrinho['produto_mapa'].unique() if i.strip()]
-    item_remover = st.sidebar.selectbox("Excluir item do carrinho:", [""] + lista_itens_carrinho)
+    item_remover = st.sidebar.selectbox("Excluir do carrinho:", [""] + lista_itens_carrinho)
     
-    if st.sidebar.button("❌ Remover Item"):
+    if st.sidebar.button("Remover Item"):
         if item_remover:
             st.session_state.carrinho = st.session_state.carrinho[st.session_state.carrinho['produto_mapa'] != item_remover]
             salvar_carrinho_no_banco(); st.rerun()
 
-    if st.sidebar.button("🗑️ Esvaziar Todo o Carrinho"):
+    if st.sidebar.button("Esvaziar Carrinho"):
         st.session_state.carrinho = pd.DataFrame()
         salvar_carrinho_no_banco(); st.rerun()
 else:
-    st.sidebar.info("O carrinho está vazio. Pesquise e adicione cotações na Aba 2.")
+    st.sidebar.info("Carrinho vazio.")
 
 # ==========================================
-# 🤖 RADAR DOS COFRES (COM RAIO-X NACIONAL)
+# 🤖 RADAR DOS COFRES
 # ==========================================
 st.sidebar.divider()
-st.sidebar.subheader("🤖 Radar dos Cofres")
+st.sidebar.subheader("Radar do Sistema")
 try:
     conn_radar = conectar_banco()
     df_radar = pd.read_sql_query("SELECT COUNT(*) as total, MAX(data_assinatura) as ultima_data FROM itens_compras", conn_radar)
@@ -283,39 +340,37 @@ try:
     ultima_data = df_radar['ultima_data'].iloc[0]
     conn_radar.close()
     
-    st.sidebar.write(f"📦 Itens Locais (CE): **{total_itens:,}**".replace(',', '.'))
+    st.sidebar.write(f"Itens Locais: **{total_itens:,}**".replace(',', '.'))
     
     try:
         conn_nac = conectar_banco_nacional()
         df_nac = pd.read_sql_query("SELECT COUNT(*) as total FROM itens_nacionais", conn_nac)
         total_nac = df_nac['total'].iloc[0]
         
-        st.sidebar.write(f"🌍 Itens Nacionais: **{total_nac:,}**".replace(',', '.'))
+        st.sidebar.write(f"Itens Nacionais: **{total_nac:,}**".replace(',', '.'))
         
-        with st.sidebar.expander("👀 Ver Últimos Itens do Robô Nacional"):
+        with st.sidebar.expander("Ver Log do Robô Nacional"):
             if total_nac > 0:
                 df_ultimos = pd.read_sql_query("SELECT descricao_item, estado, valor_unitario FROM itens_nacionais ORDER BY ROWID DESC LIMIT 30", conn_nac)
                 st.dataframe(df_ultimos, use_container_width=True, hide_index=True)
             else:
                 st.info("O banco nacional ainda está vazio ou atualizando.")
         conn_nac.close()
-        st.sidebar.success("✅ Duplo Cofre Offline Operante.")
     except Exception:
-        st.sidebar.write(f"🌍 Itens Nacionais: **0**")
-        st.sidebar.warning("⏳ Banco Nacional não detectado.")
+        st.sidebar.write(f"Itens Nacionais: **0**")
         
-    st.sidebar.write(f"🔄 Última Captura CE: **{ultima_data}**")
+    st.sidebar.write(f"Ult. Sincronização: **{ultima_data}**")
 except Exception:
     pass
 
 # ==========================================
 # 🗂️ MÓDULOS DE NAVEGAÇÃO
 # ==========================================
-opcoes_menu = ["⚙️ 0. Configurações", "📝 1. Cadastro de Solicitação (Planejamento)", "📊 2. Painel Central de Cotação (Pesquisa)", "🗂️ 3. Histórico e Relatórios"]
+opcoes_menu = ["0. Configurações", "1. Cadastro de Solicitação (Planejamento)", "2. Painel Central de Cotação (Pesquisa)", "3. Histórico e Relatórios"]
 try: idx_aba = opcoes_menu.index(st.session_state['menu_option'])
 except ValueError: idx_aba = 0
 
-aba_selecionada = st.radio("Escolha o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
+aba_selecionada = st.radio("Selecione o Módulo:", opcoes_menu, index=idx_aba, horizontal=True, label_visibility="collapsed")
 if aba_selecionada != st.session_state['menu_option']:
     st.session_state['menu_option'] = aba_selecionada
     st.rerun()
@@ -323,8 +378,8 @@ if aba_selecionada != st.session_state['menu_option']:
 # ==========================================
 # TELA 0: CONFIGURAÇÕES DA ENTIDADE
 # ==========================================
-if aba_selecionada == "⚙️ 0. Configurações":
-    st.subheader("⚙️ Configurações da Entidade (Prefeitura/Órgão)")
+if aba_selecionada == "0. Configurações":
+    st.subheader("Configurações da Entidade (Órgão)")
     st.markdown("Os dados preenchidos aqui serão utilizados como cabeçalho em **todos os relatórios PDF** gerados pelo sistema.")
     
     conn = conectar_banco()
@@ -338,14 +393,14 @@ if aba_selecionada == "⚙️ 0. Configurações":
     
     with st.form("form_config"):
         c1, c2 = st.columns(2)
-        nome = c1.text_input("Nome da Entidade (Ex: PREFEITURA MUNICIPAL DE ASSARÉ)", value=cfg_nome)
-        cnpj = c2.text_input("CNPJ (Ex: 07.587.983/0001-53)", value=cfg_cnpj)
+        nome = c1.text_input("Nome da Entidade", value=cfg_nome)
+        cnpj = c2.text_input("CNPJ", value=cfg_cnpj)
         end = st.text_input("Endereço Completo", value=cfg_end)
         cont = st.text_input("Contato (Telefone / Email / Site)", value=cfg_contato)
-        st.markdown("**Logomarca do Órgão**")
+        st.markdown("Logomarca do Órgão")
         logo_file = st.file_uploader("Envie a imagem (Preferência para fundo transparente PNG)", type=['png', 'jpg', 'jpeg'])
         
-        if st.form_submit_button("💾 Salvar Configurações Gerais"):
+        if st.form_submit_button("Salvar Configurações Gerais"):
             logo_blob = None
             if logo_file is not None: logo_blob = logo_file.read()
             elif not df_cfg.empty and df_cfg['logo'].iloc[0] is not None: logo_blob = df_cfg['logo'].iloc[0]
@@ -353,17 +408,17 @@ if aba_selecionada == "⚙️ 0. Configurações":
             conn.execute("DELETE FROM configuracoes")
             conn.execute("INSERT INTO configuracoes (nome_orgao, cnpj, endereco, contato, logo) VALUES (?, ?, ?, ?, ?)", (nome.upper(), cnpj, end.upper(), cont, logo_blob))
             conn.commit()
-            st.success("✅ Configurações e Logomarca salvas com sucesso!")
+            st.success("Configurações salvas com sucesso!")
             time.sleep(1.5); st.rerun()
     conn.close()
 
 # ==========================================
 # TELA 1: SOLICITAÇÃO E IMPORTADOR
 # ==========================================
-elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
+elif aba_selecionada == "1. Cadastro de Solicitação (Planejamento)":
     
     c_z1, c_z2 = st.columns([4, 1])
-    if c_z2.button("⚠️ Zerar Planejamento (Atenção)"):
+    if c_z2.button("Zerar Planejamento (Atenção)"):
         conn = conectar_banco()
         for t in ['solicitacoes', 'lotes_solicitacao', 'itens_solicitacao', 'cotacoes_salvas']:
             conn.execute(f"DROP TABLE IF EXISTS {t}")
@@ -371,10 +426,10 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
         conectar_banco()
         if 'solic_importada' in st.session_state: del st.session_state['solic_importada']
         st.session_state.carrinho = pd.DataFrame()
-        st.success("✅ Banco limpo. Pode importar a nova pauta."); st.rerun()
+        st.success("Banco limpo. Pode importar a nova pauta."); st.rerun()
 
-    st.markdown("### 📥 Importação Automática de Pautas Consolidadas")
-    with st.expander("Clique aqui para enviar uma Planilha (Excel/CSV) e extrair os itens", expanded=False):
+    st.markdown("### Importação Automática de Pautas")
+    with st.expander("Importar Planilha (Excel/CSV)", expanded=False):
         arquivo_pauta = st.file_uploader("Selecione o arquivo da Pauta", type=["csv", "xlsx"])
         
         if arquivo_pauta:
@@ -404,12 +459,12 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                     novas_colunas.append(nome_limpo)
                 df_pauta.columns = novas_colunas
                 
-                st.success("✅ Planilha lida com sucesso! Configure a Cotação abaixo:")
+                st.success("Planilha lida com sucesso! Configure a Cotação abaixo:")
                 
                 c_capa1, c_capa2 = st.columns(2)
                 nome_solic_auto = c_capa1.text_input("Nome do Arquivo Interno:", value=f"PAUTA CONSOLIDADA - {arquivo_pauta.name.split('.')[0]}")
-                desc_obj = c_capa1.text_area("Objeto da Compra (Para a Capa do PDF):", value="AQUISIÇÃO DE GÊNEROS ALIMENTÍCIOS DIVERSOS")
-                sec_solic = c_capa2.text_area("Secretarias Solicitantes (Uma por linha):", value="SECRETARIA MUNICIPAL DE EDUCAÇÃO\nSECRETARIA MUNICIPAL DE SAÚDE")
+                desc_obj = c_capa1.text_area("Objeto da Compra (Para a Capa):", value="AQUISIÇÃO DE MATERIAIS")
+                sec_solic = c_capa2.text_area("Órgãos Solicitantes (Um por linha):", value="SECRETARIA DE ADMINISTRAÇÃO")
                 
                 c_map3, c_map4, c_map5 = st.columns(3)
                 idx_desc = list(df_pauta.columns).index("ESPECIFICAÇÃO") if "ESPECIFICAÇÃO" in df_pauta.columns else 0
@@ -422,7 +477,7 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                 col_unid = c_map4.selectbox("Coluna da Unidade de Medida:", df_pauta.columns, index=idx_unid)
                 col_qtd = c_map5.selectbox("Coluna da Quantidade TOTAL:", df_pauta.columns, index=idx_total)
                 
-                if st.button("🚀 Processar Pauta e Iniciar Cotação", type="primary"):
+                if st.button("Processar Pauta", type="primary"):
                     conn = conectar_banco()
                     num_gerado = f"PAUTA-{datetime.now().strftime('%m%d%H%M')}"
                     
@@ -444,39 +499,39 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
                             except: cursor.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote_master, id_solic_master, desc_val, unid_val))
                     
                     conn.commit(); conn.close()
-                    st.success("✅ Pauta Consolidada importada com sucesso! 👆 Suba a tela e clique na Aba '📊 2. Painel Central de Cotação (Pesquisa)' para continuar.")
-            except Exception as e: st.error(f"Erro ao processar o arquivo: {e}")
+                    st.success("Pauta importada. Vá para o módulo 2.")
+            except Exception as e: st.error(f"Erro no processamento: {e}")
 
     st.divider()
 
-    with st.expander("✏️ OPÇÃO MANUAL: Cadastrar Solicitação Secretaria por Secretaria", expanded=False):
+    with st.expander("Opção Manual (Inserção de Itens)", expanded=False):
         c_man1, c_man2 = st.columns(2)
-        nome_sec = c_man1.text_input("Nome da Secretaria / Arquivo")
+        nome_sec = c_man1.text_input("Identificação do Processo")
         obj_man = c_man1.text_area("Objeto da Compra (Capa):", value="AQUISIÇÃO DE MATERIAIS")
-        sec_man = c_man2.text_area("Secretarias Solicitantes (Capa):", value="SECRETARIA GERAL")
+        sec_man = c_man2.text_area("Órgãos Solicitantes:", value="SECRETARIA GERAL")
         
-        if st.button("Criar Nova Solicitação Manual"):
+        if st.button("Criar Processo Manual"):
             if nome_sec:
                 num_gerado = f"{datetime.now().strftime('%Y.%m%d%H%M')}"
                 conn = conectar_banco()
                 conn.execute("INSERT INTO solicitacoes (numero_solic, secretaria, data_solic, status, objeto, secretarias) VALUES (?, ?, ?, ?, ?, ?)", 
                              (num_gerado, nome_sec.upper(), datetime.now().strftime('%d/%m/%Y'), 'ABERTA', obj_man.upper(), sec_man.upper()))
-                conn.commit(); conn.close(); st.success(f"Solicitação manual criada!"); st.rerun()
+                conn.commit(); conn.close(); st.success(f"Criado!"); st.rerun()
 
     conn = conectar_banco()
     try: df_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
     except: df_solic = pd.DataFrame() 
     
     if not df_solic.empty:
-        st.subheader("📋 VISUALIZAR E ADICIONAR ITENS")
-        solic_selecionada = st.selectbox("Selecione a Solicitação no Banco", df_solic['id'].astype(str) + " - " + df_solic['secretaria'])
+        st.markdown("### Visualizar Pauta e Adicionar Itens")
+        solic_selecionada = st.selectbox("Pauta Aberta:", df_solic['id'].astype(str) + " - " + df_solic['secretaria'])
         id_solic = int(solic_selecionada.split(" - ")[0])
         
         c_lote, c_item = st.columns(2)
         with c_lote:
             with st.form("form_lote", clear_on_submit=True):
-                nome_lote = st.text_input("Nome do Lote")
-                if st.form_submit_button("Criar Lote Manual"):
+                nome_lote = st.text_input("Adicionar Lote")
+                if st.form_submit_button("Salvar Lote"):
                     if nome_lote:
                         conn.execute("INSERT INTO lotes_solicitacao (id_solicitacao, nome_lote, desc_lote) VALUES (?, ?, ?)", (id_solic, nome_lote.upper(), ""))
                         conn.commit(); st.rerun()
@@ -485,13 +540,13 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
         with c_item:
             if not df_lotes.empty:
                 with st.form("form_item", clear_on_submit=True):
-                    lote_selec = st.selectbox("Lote", df_lotes['id'].astype(str) + " - " + df_lotes['nome_lote'])
+                    lote_selec = st.selectbox("Lote Alvo", df_lotes['id'].astype(str) + " - " + df_lotes['nome_lote'])
                     id_lote = int(lote_selec.split(" - ")[0])
-                    desc_item = st.text_area("Descrição")
+                    desc_item = st.text_area("Item")
                     ci_1, ci_2 = st.columns(2)
-                    unid_item = ci_1.text_input("Unid.")
-                    qtd_item = ci_2.number_input("Qtd", min_value=1.0)
-                    if st.form_submit_button("Inserir Item Manual"):
+                    unid_item = ci_1.text_input("Un.")
+                    qtd_item = ci_2.number_input("Qtd.", min_value=1.0)
+                    if st.form_submit_button("Inserir Item"):
                         if desc_item and unid_item:
                             try: conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida, quantidade) VALUES (?, ?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper(), qtd_item))
                             except sqlite3.OperationalError: conn.execute("INSERT INTO itens_solicitacao (id_lote, id_solicitacao, descricao, unid_medida) VALUES (?, ?, ?, ?)", (id_lote, id_solic, desc_item.upper(), unid_item.upper()))
@@ -509,19 +564,19 @@ elif aba_selecionada == "📝 1. Cadastro de Solicitação (Planejamento)":
 # ==========================================
 # TELA 2: COTAÇÃO E PESQUISA
 # ==========================================
-elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
+elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
     
-    st.subheader("📥 1. Escolher Pauta e Carregar Cotação Salva")
+    st.markdown("### Seleção de Pauta em Andamento")
     conn = conectar_banco()
     try: df_todas_solic = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='ABERTA'", conn)
     except: df_todas_solic = pd.DataFrame()
         
     if not df_todas_solic.empty:
         c_imp1, c_imp2 = st.columns([4, 1])
-        solic_escolhida = c_imp1.selectbox("Selecione a Pauta/Solicitação EM ANDAMENTO para Cotar:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
+        solic_escolhida = c_imp1.selectbox("Pauta Ativa:", df_todas_solic['id'].astype(str) + " - " + df_todas_solic['secretaria'])
         id_solic_imp = int(solic_escolhida.split(" - ")[0])
         
-        if c_imp2.button("📥 Carregar Pauta e Carrinho", use_container_width=True):
+        if c_imp2.button("Carregar Pauta", use_container_width=True):
             st.session_state['solic_importada'] = id_solic_imp
             df_cart = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={id_solic_imp}", conn)
             if not df_cart.empty and df_cart['dados_json'].iloc[0]:
@@ -543,11 +598,10 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
             
         if not df_bruto_imp.empty:
             df_itens_imp['Lote'] = df_bruto_imp['Lote']; df_itens_imp['Produto'] = df_bruto_imp['Produto']; df_itens_imp['Unid'] = df_bruto_imp['Unid']; df_itens_imp['Qtd'] = df_bruto_imp['quantidade'] if 'quantidade' in df_bruto_imp.columns else 1.0
-            st.markdown("### 📋 Planilha Extraída")
             st.dataframe(df_itens_imp, use_container_width=True, hide_index=True)
             
             lista_produtos = df_itens_imp['Produto'].tolist()
-            item_selecionado = st.selectbox("🎯 Selecione um item da planilha acima para Cotar Preços:", [""] + lista_produtos)
+            item_selecionado = st.selectbox("Selecione um item da planilha acima para consultar:", [""] + lista_produtos)
             
             if item_selecionado != st.session_state['ultimo_item_selecionado']:
                 st.session_state['ultimo_item_selecionado'] = item_selecionado
@@ -567,36 +621,33 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 st.rerun() 
                 
             if item_selecionado:
-                st.success(f"✔️ Item Selecionado: **{item_selecionado}** | 📦 Qtd Total: **{st.session_state['safe_qtd_relatorio']}**")
+                st.success(f"Item Alvo: {item_selecionado} | Qtd: {st.session_state['safe_qtd_relatorio']}")
     
     conn.close(); st.divider()
 
-    st.subheader("2. Buscar nos Bancos de Dados Offline")
+    st.markdown("### Busca Central nos Cofres (CE e Nacional)")
 
     with st.form("form_consulta"):
         c1, c2, c3, c4 = st.columns(4)
-        p1 = c1.text_input("Palavra Principal", key="p1_busca_form")
+        p1 = c1.text_input("Termo Principal", key="p1_busca_form")
         p2 = c2.text_input("Contendo também (1)", key="p2_busca_form")
         p3 = c3.text_input("Contendo também (2)", key="p3_busca_form")
-        p_excluir = c4.text_input("🚫 NÃO pode conter")
+        p_excluir = c4.text_input("Não pode conter")
         
         c5, c6, c7, c8, c9 = st.columns([2, 1.5, 1.5, 1.5, 1.5])
-        modo_busca = c5.selectbox("🧠 Inteligência da Busca", ["🔍 Ampla (Qualquer parte do texto)", "🎯 Inteligente (Focar no Nome do Produto)"])
+        modo_busca = c5.selectbox("Tipo de Filtro", ["Ampla (Qualquer parte)", "Inteligente (Início da Descrição)"])
         dt_ini = c6.date_input("Data inicial", value=datetime(2025, 1, 1), format="DD/MM/YYYY")
         dt_fim = c7.date_input("Data final", format="DD/MM/YYYY")
-        val_ini = c8.number_input("Valor mínimo (R$)", min_value=0.0, step=1.0)
-        val_fim = c9.number_input("Valor máximo (R$)", min_value=0.0, step=1.0)
+        val_ini = c8.number_input("Valor min. (R$)", min_value=0.0, step=1.0)
+        val_fim = c9.number_input("Valor max. (R$)", min_value=0.0, step=1.0)
         
         c10, c11, c12 = st.columns([1.5, 3, 1.5])
-        uf = c10.selectbox("UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=15)
-        relevancia = c11.text_input("Busca Exata (A frase exata precisa estar no texto)")
-        ordem = c12.selectbox("Ordenar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
+        uf = c10.selectbox("Filtro de UF", ["TODAS", "CE", "AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"], index=15)
+        relevancia = c11.text_input("Frase Exata (Obrigatória no texto)")
+        ordem = c12.selectbox("Classificar por", ["DATA RECENTE", "MENOR PREÇO", "MAIOR PREÇO"])
         
-        submit = st.form_submit_button("🔎 Consultar Bancos de Dados")
+        submit = st.form_submit_button("Consultar Base de Dados")
 
-    # ==========================================
-    # A INTELIGÊNCIA: MISTURA TOTAL E FILTRO ANTI-LIXO
-    # ==========================================
     if submit:
         st.session_state['search_id'] = str(time.time()) 
         
@@ -628,22 +679,19 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         query_local = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
         query_nacional = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_nacionais WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
 
-        # A MÁGICA DO REGEX: Filtrando Bordas (\b)
         def aplicar_filtro_estrito(df_alvo, texto):
             if not texto or df_alvo.empty: return df_alvo
             termo = remover_acentos(texto).strip()
             stopwords = ['DE', 'DO', 'DA', 'EM', 'COM', 'PARA', 'E', 'OU', 'A', 'O', 'AS', 'OS']
             palavras = [p for p in termo.split() if p not in stopwords and len(p) > 1]
             for p in palavras:
-                # O \b garante que CIMENTO não ache FORNECIMENTO
                 df_alvo = df_alvo[df_alvo['descricao_item'].str.contains(rf'\b{p}\b', regex=True, na=False)]
             return df_alvo
         
-        with st.spinner("⚡ Acessando e combinando os cofres de dados..."):
+        with st.spinner("Lendo base de dados local e nacional..."):
             df_local = pd.DataFrame()
             df_nac = pd.DataFrame()
             
-            # ABRE OS DOIS COFRES INDEPENDENTE DE QUALQUER COISA
             try:
                 conn_loc = conectar_banco()
                 df_local = pd.read_sql_query(query_local, conn_loc)
@@ -656,59 +704,45 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
                 conn_nac.close()
             except: pass
             
-            # MISTURA TUDO
             df_combinado = pd.concat([df_local, df_nac], ignore_index=True)
 
             if not df_combinado.empty:
                 df_combinado = df_combinado.drop_duplicates(subset=['descricao_item', 'valor_unitario', 'credor', 'link_pncp'])
-                
-                # APLICA A INTELIGÊNCIA ANTI-LIXO (Cimento =/= Fornecimento)
                 df_combinado = aplicar_filtro_estrito(df_combinado, p1)
                 df_combinado = aplicar_filtro_estrito(df_combinado, p2)
                 df_combinado = aplicar_filtro_estrito(df_combinado, p3)
                 
                 if not df_combinado.empty:
-                    # AGORA APLICA O FILTRO DA UF QUE O USUÁRIO ESCOLHEU
                     df_final = pd.DataFrame()
-                    
                     if uf != "TODAS":
                         df_final = df_combinado[df_combinado['estado'] == uf]
-                        
                         if not df_final.empty:
                             df_final.insert(0, 'Selecionar', False)
                             df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
                             df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                             st.session_state.df_resultados = df_final.head(150)
-                            st.success(f"⚡ Encontrado! Consulta ultrarrápida concluída para a UF: {uf}.")
                         else:
-                            # Se ele pediu "SP" e não tem SP, ele mostra o Brasil inteiro como Fallback
                             df_combinado.insert(0, 'Selecionar', False)
                             df_combinado['municipio'] = df_combinado['municipio'].fillna('Não Informado')
                             df_combinado['data_assinatura'] = pd.to_datetime(df_combinado['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                             st.session_state.df_resultados = df_combinado.head(150)
-                            st.warning(f"⚠️ Nenhum item exato registrado para a UF '{uf}'. Trouxemos cotações de **OUTROS ESTADOS**.")
+                            st.warning(f"Nenhum item exato na UF '{uf}'. Exibindo referência Nacional.")
                     else:
-                        # Se escolheu TODAS, mostra a mistura total de cara
                         df_final = df_combinado
                         df_final.insert(0, 'Selecionar', False)
                         df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
                         df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                         st.session_state.df_resultados = df_final.head(150)
-                        st.success(f"⚡ Mistura Total concluída! Exibindo cotações de todo o Brasil.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
-                    st.error("❌ A palavra foi encontrada, mas não corresponde ao termo exato isolado (Ex: 'cimento' bateu com 'fornecimento'). Tente ajustar a busca.")
+                    st.error("Termo encontrado, mas retido pelo Filtro Estrito (ex: procurou 'cimento', achou 'fornecimento').")
             else:
                 st.session_state.df_resultados = pd.DataFrame()
-                st.error("❌ Os termos pesquisados não foram encontrados em nenhum dos nossos bancos de dados.")
+                st.error("Nenhum registro encontrado.")
 
-    # ==========================================
-    # RENDERIZAÇÃO DA TABELA
-    # ==========================================
     if not st.session_state.df_resultados.empty:
-        st.info("⚠️ **Atenção:** Revise a coluna 'Descrição' antes de marcar o Checkbox na esquerda.")
-        st.markdown("#### ⚙️ Configuração do Item para o Carrinho"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
-        nome_grupo = c_add1.text_input("📝 Nome Oficial para o Relatório PDF:", value=st.session_state['safe_nome_relatorio']); qtd_grupo = c_add2.number_input("📦 Quantidade Final:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
+        st.markdown("### Preenchimento do Relatório PDF"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
+        nome_grupo = c_add1.text_input("Descrição Oficial do Item:", value=st.session_state['safe_nome_relatorio']); qtd_grupo = c_add2.number_input("Qtd. Total:", value=float(st.session_state['safe_qtd_relatorio']), step=1.0)
         st.session_state['safe_nome_relatorio'] = nome_grupo; st.session_state['safe_qtd_relatorio'] = qtd_grupo
         
         colunas_mostrar = ['Selecionar', 'descricao_item', 'unid_medida', 'valor_unitario', 'municipio', 'estado', 'credor', 'data_assinatura', 'id_item', 'link_pncp', 'origem']
@@ -716,74 +750,71 @@ elif aba_selecionada == "📊 2. Painel Central de Cotação (Pesquisa)":
         chave_dinamica = f"editor_busca_{st.session_state.get('search_id', 'default')}"
         df_editado = st.data_editor(
             df_exibicao, key=chave_dinamica, use_container_width=True, hide_index=True, height=350,
-            column_config={"Selecionar": st.column_config.CheckboxColumn("✅", required=True), "descricao_item": st.column_config.TextColumn("Descrição da Nota", width="large"), "valor_unitario": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), "data_assinatura": st.column_config.TextColumn("Data", width="small"), "id_item": None, "origem": None, "link_pncp": st.column_config.LinkColumn("Edital", display_text="🔗 Acessar")}
+            column_config={"Selecionar": st.column_config.CheckboxColumn("X", required=True), "descricao_item": st.column_config.TextColumn("Descrição da Nota", width="large"), "valor_unitario": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f"), "data_assinatura": st.column_config.TextColumn("Data", width="small"), "id_item": None, "origem": None, "link_pncp": st.column_config.LinkColumn("Edital", display_text="Visualizar")}
         )
         
-        if c_add3.button("➕ ADICIONAR SELECIONADOS AO CARRINHO", type="primary", use_container_width=True):
-            if not st.session_state['safe_nome_relatorio'].strip(): st.error("🚨 ERRO: O Nome do Relatório não pode ficar em branco! Preencha a caixa acima antes de adicionar.")
+        if c_add3.button("INCLUIR COTAÇÕES", type="primary", use_container_width=True):
+            if not st.session_state['safe_nome_relatorio'].strip(): st.error("Insira o nome oficial do relatório.")
             else:
                 selecionados = df_editado[df_editado['Selecionar'] == True].copy()
                 selecionados = selecionados.drop(columns=['Selecionar'])
                 if not selecionados.empty:
                     selecionados['produto_mapa'] = remover_acentos(st.session_state['safe_nome_relatorio']).strip(); selecionados['quantidade'] = float(st.session_state['safe_qtd_relatorio']) 
                     selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
-                    st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True); st.session_state['ultimo_item_selecionado'] = ""; salvar_carrinho_no_banco(); st.success("✅ Cotações adicionadas com sucesso!"); time.sleep(1); st.rerun()
-                else: st.warning("Selecione pelo menos um item marcando o ✅ na tabela.")
+                    st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True); st.session_state['ultimo_item_selecionado'] = ""; salvar_carrinho_no_banco(); st.success("Incluído!"); time.sleep(1); st.rerun()
+                else: st.warning("Marque o 'X' na tabela.")
                 
-    st.divider(); st.subheader("📋 Planilha de Cotações Salvas na Cesta (Visão Raio-X)")
+    st.divider(); st.markdown("### Resumo do Mapa de Preços")
     if not st.session_state.carrinho.empty:
-        st.info("💡 **COMO O SISTEMA CALCULA O MAPA:** As cotações abaixo com o mesmo **'Nome do Grupo'** serão fundidas pelo sistema na hora de gerar os PDFs.")
         df_raiox = st.session_state.carrinho[['produto_mapa', 'descricao_item', 'credor', 'valor_unitario', 'origem']].copy()
-        st.dataframe(df_raiox, use_container_width=True, hide_index=True, height=300, column_config={"produto_mapa": st.column_config.TextColumn("🏷️ NOME DO GRUPO (PDF)", width="medium"), "descricao_item": st.column_config.TextColumn("📄 Descrição da Nota Fiscal", width="large"), "credor": "🏢 Fornecedor", "valor_unitario": st.column_config.NumberColumn("💰 Valor Unitário", format="R$ %.2f"), "origem": "🌐 Fonte"})
-    else: st.warning("A sua cesta de cotações está vazia.")
+        st.dataframe(df_raiox, use_container_width=True, hide_index=True, height=300, column_config={"produto_mapa": st.column_config.TextColumn("Grupo PDF", width="medium"), "descricao_item": st.column_config.TextColumn("Descrição", width="large"), "credor": "Fornecedor", "valor_unitario": st.column_config.NumberColumn("Valor Un.", format="R$ %.2f"), "origem": "Fonte"})
+    else: st.info("Vazio.")
 
-    st.divider(); st.subheader("3. Adicionar Cotação da Internet (Manual)")
+    st.divider(); st.markdown("### Cotação Avulsa (Internet)")
     with st.form("form_internet"):
-        c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1]); desc_int = c_int1.text_input("Descrição do Item da Web"); unid_int = c_int2.text_input("Unidade"); qtd_int = c_int5.number_input("Quantidade", step=1.0, key="input_qtd_internet_form") 
-        c_int3, c_int4 = st.columns([2, 1]); forn_int = c_int3.text_input("Nome da Loja Varejista e CNPJ"); val_int = c_int4.number_input("Valor Final c/ Frete (R$)", min_value=0.0, step=0.1); link_int = st.text_input("Link / URL do Anúncio")
-        if st.form_submit_button("➕ Adicionar Cotação Web ao Carrinho"):
+        c_int1, c_int2, c_int5 = st.columns([2.5, 1, 1]); desc_int = c_int1.text_input("Descrição Web"); unid_int = c_int2.text_input("Un."); qtd_int = c_int5.number_input("Qtd.", step=1.0, key="input_qtd_internet_form") 
+        c_int3, c_int4 = st.columns([2, 1]); forn_int = c_int3.text_input("Fornecedor / CNPJ"); val_int = c_int4.number_input("Valor Final (R$)", min_value=0.0, step=0.1); link_int = st.text_input("URL")
+        if st.form_submit_button("Inserir no Carrinho"):
             if desc_int and forn_int and val_int > 0:
                 novo_item = pd.DataFrame([{'descricao_item': remover_acentos(desc_int), 'produto_mapa': remover_acentos(desc_int).strip(), 'unid_medida': remover_acentos(unid_int), 'valor_unitario': float(val_int), 'municipio': 'LOJA VIRTUAL', 'estado': '-', 'credor': forn_int.upper(), 'data_assinatura': datetime.now().strftime('%d/%m/%Y'), 'id_item': f"INT-{time.time()}", 'link_pncp': link_int, 'origem': 'INTERNET', 'quantidade': float(qtd_int)}])
-                st.session_state.carrinho = pd.concat([st.session_state.carrinho, novo_item], ignore_index=True); salvar_carrinho_no_banco(); st.success("✅ Cotação da internet adicionada à cesta!")
-            else: st.error("Preencha a descrição, loja e o valor para adicionar.")
+                st.session_state.carrinho = pd.concat([st.session_state.carrinho, novo_item], ignore_index=True); salvar_carrinho_no_banco(); st.success("Salvo!")
+            else: st.error("Dados incompletos.")
                 
-    st.divider(); st.header("🎯 4. Finalizar Cotação"); st.info("Terminou de cotar todos os itens da planilha? Clique abaixo para trancar esta cotação e enviá-la para o Histórico Definitivo.")
-    if st.button("🔒 Finalizar Cotação e Enviar para o Histórico", type="primary", use_container_width=True):
+    st.divider(); st.markdown("### Fechamento de Processo")
+    if st.button("Finalizar e Arquivar Pauta", type="primary", use_container_width=True):
         if 'solic_importada' in st.session_state and st.session_state['solic_importada'] is not None:
             id_imp = st.session_state['solic_importada']
             conn = conectar_banco(); conn.execute("UPDATE solicitacoes SET status='FINALIZADA', data_solic=? WHERE id=?", (datetime.now().strftime('%d/%m/%Y %H:%M'), id_imp)); conn.commit(); conn.close()
-            st.session_state['solic_importada'] = None; st.session_state.carrinho = pd.DataFrame(); st.session_state['menu_option'] = "🗂️ 3. Histórico e Relatórios"
-            st.success("✅ Cotação Finalizada com Sucesso! Redirecionando para o Histórico..."); time.sleep(1.5); st.rerun()
-        else: st.error("Nenhuma pauta foi carregada para ser finalizada.")
+            st.session_state['solic_importada'] = None; st.session_state.carrinho = pd.DataFrame(); st.session_state['menu_option'] = "3. Histórico e Relatórios"
+            time.sleep(0.5); st.rerun()
 
 # ==========================================
 # TELA 3: HISTÓRICO E RELATÓRIOS
 # ==========================================
-elif aba_selecionada == "🗂️ 3. Histórico e Relatórios":
-    st.subheader("🗂️ Histórico de Cotações Finalizadas")
-    st.markdown("Aqui ficam armazenadas as suas cotações concluídas. Você pode baixar os Relatórios em PDF ou reabrir uma cotação para alterar itens.")
+elif aba_selecionada == "3. Histórico e Relatórios":
+    st.subheader("Processos Concluídos e Relatórios Oficiais")
     conn = conectar_banco()
     try: df_hist = pd.read_sql_query("SELECT * FROM solicitacoes WHERE status='FINALIZADA' ORDER BY id DESC", conn)
     except: df_hist = pd.DataFrame()
         
-    if df_hist.empty: st.info("Nenhuma cotação finalizada ainda. Suas cotações finalizadas na Aba 2 aparecerão aqui.")
+    if df_hist.empty: st.info("Arquivo vazio.")
     else:
         for _, row in df_hist.iterrows():
-            with st.expander(f"📁 Processo: {row['numero_solic']} | Objeto: {row['objeto'][:40]}... | Concluído em: {row['data_solic']}"):
-                st.write(f"**Órgãos Solicitantes:**"); st.write(row['secretarias']); c_hist1, c_hist2 = st.columns(2)
-                if c_hist1.button("✏️ Reabrir para Edição (Alterar/Excluir Itens)", key=f"edit_{row['id']}"):
-                    conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],)); conn.commit(); st.session_state['solic_importada'] = row['id']; st.session_state['menu_option'] = "📊 2. Painel Central de Cotação (Pesquisa)"; st.rerun()
-                if c_hist2.button("📄 Carregar Relatórios Oficiais em PDF", key=f"pdf_{row['id']}"):
+            with st.expander(f"Processo: {row['numero_solic']} | Concluído: {row['data_solic']}"):
+                st.write(row['secretarias']); c_hist1, c_hist2 = st.columns(2)
+                if c_hist1.button("Reabrir Processo", key=f"edit_{row['id']}"):
+                    conn.execute("UPDATE solicitacoes SET status='ABERTA' WHERE id=?", (row['id'],)); conn.commit(); st.session_state['solic_importada'] = row['id']; st.session_state['menu_option'] = "2. Painel Central de Cotação (Pesquisa)"; st.rerun()
+                if c_hist2.button("Processar PDFs", key=f"pdf_{row['id']}"):
                     df_cart_hist = pd.read_sql_query(f"SELECT dados_json FROM cotacoes_salvas WHERE id_solicitacao={row['id']}", conn)
                     if not df_cart_hist.empty and df_cart_hist['dados_json'].iloc[0]:
                         df_print = pd.read_json(StringIO(df_cart_hist['dados_json'].iloc[0]), orient='records'); config_entidade = get_config_entidade(); lista_sec = row['secretarias'].split('\n')
                         st.session_state[f'pdf_capa_{row["id"]}'] = gerar_pdf_capa(config_entidade, row['numero_solic'], row['objeto'], lista_sec); st.session_state[f'pdf_mapa_{row["id"]}'] = gerar_pdf_mapa(df_print, config_entidade, row['numero_solic'], row['objeto']); st.session_state[f'pdf_pncp_{row["id"]}'] = gerar_pdf_detalhado_pncp(df_print, config_entidade, row['numero_solic'], row['objeto']); st.session_state[f'pdf_link_{row["id"]}'] = gerar_pdf_detalhado_links(df_print, config_entidade, row['numero_solic'], row['objeto'])
-                    else: st.error("O carrinho desta cotação está vazio. Reabra para edição e adicione itens.")
+                    else: st.error("Sem dados.")
                         
                 if f'pdf_capa_{row["id"]}' in st.session_state:
-                    st.success("✅ Relatórios Prontos para Download!"); dl1, dl2, dl3, dl4 = st.columns(4)
-                    dl1.download_button("1️⃣ BAIXAR CAPA", st.session_state[f'pdf_capa_{row["id"]}'], f"1_Capa_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_capa_{row['id']}")
-                    dl2.download_button("2️⃣ BAIXAR MAPA DE PREÇOS", st.session_state[f'pdf_mapa_{row["id"]}'], f"2_Mapa_{row['numero_solic']}.pdf", "application/pdf", type="primary", key=f"dl_mapa_{row['id']}")
-                    dl3.download_button("3️⃣ RELATÓRIO PNCP", st.session_state[f'pdf_pncp_{row["id"]}'], f"3_PNCP_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_pncp_{row['id']}")
-                    dl4.download_button("4️⃣ RELATÓRIO WEB", st.session_state[f'pdf_link_{row["id"]}'], f"4_WEB_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_link_{row['id']}")
+                    dl1, dl2, dl3, dl4 = st.columns(4)
+                    dl1.download_button("CAPA", st.session_state[f'pdf_capa_{row["id"]}'], f"Capa_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_capa_{row['id']}")
+                    dl2.download_button("MAPA DE PREÇO", st.session_state[f'pdf_mapa_{row["id"]}'], f"Mapa_{row['numero_solic']}.pdf", "application/pdf", type="primary", key=f"dl_mapa_{row['id']}")
+                    dl3.download_button("DETALHAMENTO PNCP", st.session_state[f'pdf_pncp_{row["id"]}'], f"PNCP_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_pncp_{row['id']}")
+                    dl4.download_button("DETALHAMENTO WEB", st.session_state[f'pdf_link_{row["id"]}'], f"WEB_{row['numero_solic']}.pdf", "application/pdf", key=f"dl_link_{row['id']}")
     conn.close()
