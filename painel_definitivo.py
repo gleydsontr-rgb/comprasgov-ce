@@ -114,7 +114,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.4 Classic Desktop (Ajuste Visual Anti-Corte)</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.5 Classic Desktop (Correção FPDF Logo)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -174,11 +174,15 @@ def conectar_banco_nacional():
     return conn
 
 def get_config_entidade():
+    # Usando SQLite puro para evitar corrupção de BLOBs pelo Pandas
     conn = conectar_banco()
-    try: df_cfg = pd.read_sql_query("SELECT * FROM configuracoes ORDER BY id DESC LIMIT 1", conn)
-    except: df_cfg = pd.DataFrame()
-    conn.close()
-    if not df_cfg.empty: return {'nome': df_cfg['nome_orgao'].iloc[0], 'cnpj': df_cfg['cnpj'].iloc[0], 'endereco': df_cfg['endereco'].iloc[0], 'contato': df_cfg['contato'].iloc[0], 'logo': df_cfg['logo'].iloc[0]}
+    cursor = conn.cursor()
+    try:
+        cursor.execute("SELECT nome_orgao, cnpj, endereco, contato, logo FROM configuracoes ORDER BY id DESC LIMIT 1")
+        row = cursor.fetchone()
+        conn.close()
+        if row: return {'nome': row[0] if row[0] else '', 'cnpj': row[1] if row[1] else '', 'endereco': row[2] if row[2] else '', 'contato': row[3] if row[3] else '', 'logo': row[4]}
+    except: conn.close()
     return {'nome': 'PREFEITURA MUNICIPAL', 'cnpj': '', 'endereco': '', 'contato': '', 'logo': None}
 
 def salvar_carrinho_no_banco():
@@ -194,7 +198,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (INTACTA)
+# 📄 FÁBRICA DE PDFs (CORREÇÃO DE EXTENSÃO DO LOGO)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -202,8 +206,11 @@ class RelatorioPDF(FPDF):
     def header(self):
         if self.config.get('logo'):
             try:
-                logo_path = f"logo_tmp_{int(time.time())}.png"
-                with open(logo_path, "wb") as f: f.write(self.config['logo'])
+                logo_b = self.config['logo']
+                ext = ".png"
+                if isinstance(logo_b, bytes) and logo_b.startswith(b'\xff\xd8'): ext = ".jpg"
+                logo_path = f"logo_tmp_{int(time.time()*1000)}_{id(self)}{ext}"
+                with open(logo_path, "wb") as f: f.write(logo_b)
                 self.image(logo_path, 10, 8, 25)
             except: pass
         self.set_font('Arial', 'B', 14); self.cell(0, 6, tratar_texto(self.config.get('nome', 'ÓRGÃO COMPRADOR')), 0, 1, 'C')
@@ -221,8 +228,11 @@ def gerar_pdf_capa(config, processo, objeto, secretarias_lista):
     pdf = FPDF(); pdf.add_page()
     if config.get('logo'):
         try:
-            logo_path = f"logo_capa_{int(time.time())}.png"
-            with open(logo_path, "wb") as f: f.write(config['logo'])
+            logo_b = config['logo']
+            ext = ".png"
+            if isinstance(logo_b, bytes) and logo_b.startswith(b'\xff\xd8'): ext = ".jpg"
+            logo_path = f"logo_capa_{int(time.time()*1000)}{ext}"
+            with open(logo_path, "wb") as f: f.write(logo_b)
             pdf.image(logo_path, 90, 15, 30); pdf.set_y(50)
         except: pdf.set_y(30)
     else: pdf.set_y(30)
@@ -248,8 +258,11 @@ class RelatorioMapaPDF(FPDF):
     def header(self):
         if self.config.get('logo'):
             try:
-                logo_path = f"logo_tmp_mapa_{int(time.time())}.png"
-                with open(logo_path, "wb") as f: f.write(self.config['logo'])
+                logo_b = self.config['logo']
+                ext = ".png"
+                if isinstance(logo_b, bytes) and logo_b.startswith(b'\xff\xd8'): ext = ".jpg"
+                logo_path = f"logo_tmp_mapa_{int(time.time()*1000)}_{id(self)}{ext}"
+                with open(logo_path, "wb") as f: f.write(logo_b)
                 self.image(logo_path, 10, 8, 25)
             except: pass
         self.set_font('Arial', 'B', 12); self.cell(0, 5, tratar_texto(self.config.get('nome', '')), 0, 1, 'C')
