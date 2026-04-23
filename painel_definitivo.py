@@ -86,7 +86,7 @@ st.markdown("""
         background-color: #D4D0C8 !important;
     }
 
-    /* Caixas de texto com efeito "afundado" CORRIGIDAS para não cortar */
+    /* Caixas de texto com efeito "afundado" */
     div[data-baseweb="input"] > div,
     div[data-baseweb="select"] > div,
     textarea {
@@ -114,7 +114,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.5 Classic Desktop (Correção FPDF Logo)</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.6 Classic Desktop (Correção Margem Logo PDF)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -174,7 +174,6 @@ def conectar_banco_nacional():
     return conn
 
 def get_config_entidade():
-    # Usando SQLite puro para evitar corrupção de BLOBs pelo Pandas
     conn = conectar_banco()
     cursor = conn.cursor()
     try:
@@ -198,7 +197,7 @@ def salvar_carrinho_no_banco():
         conn.close()
 
 # ==========================================
-# 📄 FÁBRICA DE PDFs (CORREÇÃO DE EXTENSÃO DO LOGO)
+# 📄 FÁBRICA DE PDFs (CORREÇÃO DE MARGEM DO LOGO)
 # ==========================================
 class RelatorioPDF(FPDF):
     def __init__(self, config, processo, tipo_relatorio):
@@ -220,6 +219,10 @@ class RelatorioPDF(FPDF):
         if self.config.get('contato'): self.cell(0, 4, tratar_texto(self.config.get('contato', '')), 0, 1, 'C')
         self.ln(2); self.set_font('Arial', 'B', 10); self.cell(0, 5, tratar_texto(self.tipo_relatorio), 0, 1, 'C')
         self.set_font('Arial', '', 9); self.cell(0, 5, tratar_texto(f"Processo Nº: {self.processo}"), 0, 1, 'C')
+        
+        # PARA-CHOQUE DO LOGO: Garante que a linha e o texto pulem o brasão
+        if self.get_y() < 38: self.set_y(38)
+        
         self.line(10, self.get_y() + 2, 200, self.get_y() + 2); self.ln(8)
     def footer(self):
         self.set_y(-15); self.set_font('Arial', 'I', 8); self.cell(0, 10, tratar_texto(f'Página {self.page_no()}'), 0, 0, 'C')
@@ -272,6 +275,10 @@ class RelatorioMapaPDF(FPDF):
         self.ln(2); self.set_font('Arial', 'B', 10)
         if self.is_resumo: self.cell(0, 5, tratar_texto("RESUMO GERAL DO MAPA DE PREÇO"), 0, 1, 'C')
         else: self.cell(0, 5, tratar_texto("MAPA DE PREÇO - DETALHAMENTO POR COLETA"), 0, 1, 'C')
+        
+        # PARA-CHOQUE DO LOGO: Força a começar depois da altura 38
+        if self.get_y() < 38: self.set_y(38)
+        
         self.set_font('Arial', 'B', 9); self.cell(0, 5, tratar_texto(f"N°: {self.processo} - DATA: {datetime.now().strftime('%d/%m/%Y')}"), 0, 1, 'L')
         if self.is_resumo: self.multi_cell(0, 5, tratar_texto(f"ESPECIFICAÇÃO/OBJETO: {self.objeto}"))
         self.ln(2)
