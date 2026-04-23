@@ -28,7 +28,7 @@ except ImportError:
     st.error("⚠️ Atenção: A biblioteca requests não está instalada.")
 
 # ==========================================
-# CONFIGURAÇÃO DA PÁGINA E DESIGN CLÁSSICO (TIPO DESKTOP)
+# CONFIGURAÇÃO DA PÁGINA E DESIGN CLÁSSICO
 # ==========================================
 st.set_page_config(page_title="Sistema Central | ComprasGov", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
 
@@ -39,26 +39,26 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
 
-    /* Fundo clássico de sistema Desktop (Cinza corporativo) */
+    /* Fundo clássico de sistema Desktop */
     .stApp { background-color: #E0DFE3; font-family: 'Tahoma', 'Arial', sans-serif; }
 
-    /* Remove espaços em branco excessivos (Típico de web) para caber mais dados */
+    /* Remove espaços em branco excessivos */
     .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 98% !important; }
 
-    /* Barra de Título tipo Software Clássico (Azul Escuro Estilo Windows) */
+    /* Barra de Título tipo Software Clássico CORRIGIDA (Sem cortes) */
     .portal-header {
         background: linear-gradient(to right, #0A246A, #A6CAF0);
         color: white;
-        padding: 4px 10px;
+        padding: 10px 15px;
         font-family: 'Tahoma', 'Arial', sans-serif;
         border: 2px solid #fff;
         border-bottom-color: #888;
         border-right-color: #888;
-        margin-top: -50px;
-        margin-bottom: 10px;
+        margin-top: -20px;
+        margin-bottom: 15px;
     }
-    .portal-title { font-size: 15px; font-weight: bold; margin: 0; letter-spacing: 0px; text-shadow: 1px 1px #000; }
-    .portal-subtitle { font-size: 11px; margin-top: 0px; color: #FFF; }
+    .portal-title { font-size: 18px; font-weight: bold; margin: 0; padding-bottom: 2px; text-shadow: 1px 1px #000; }
+    .portal-subtitle { font-size: 12px; margin: 0; color: #FFF; }
 
     /* Textos e Títulos mais sóbrios e menores */
     h1, h2, h3 { color: #000 !important; font-family: 'Tahoma', 'Arial', sans-serif; font-size: 16px !important; border-bottom: 1px groove #ccc; padding-bottom: 2px; margin-bottom: 10px; margin-top: 10px;}
@@ -86,7 +86,7 @@ st.markdown("""
         background-color: #D4D0C8 !important;
     }
 
-    /* Caixas de texto com efeito "afundado" (Inset) */
+    /* Caixas de texto com efeito "afundado" */
     .stTextInput > div > div > input, .stNumberInput > div > div > input, .stTextArea > div > textarea, .stSelectbox > div > div {
         border: 2px inset #D4D0C8 !important;
         border-radius: 0px !important;
@@ -110,7 +110,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.1 Classic Desktop Edition</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.2 Classic Desktop (Busca Estrita por Estado)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -704,6 +704,7 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 conn_nac.close()
             except: pass
             
+            # 1. Junta todos os resultados
             df_combinado = pd.concat([df_local, df_nac], ignore_index=True)
 
             if not df_combinado.empty:
@@ -714,31 +715,32 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 
                 if not df_combinado.empty:
                     df_final = pd.DataFrame()
+                    # 2. FILTRAGEM ESTRITA POR ESTADO
                     if uf != "TODAS":
                         df_final = df_combinado[df_combinado['estado'] == uf]
+                        
                         if not df_final.empty:
                             df_final.insert(0, 'Selecionar', False)
                             df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
                             df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                             st.session_state.df_resultados = df_final.head(150)
+                            st.success(f"Consulta concluída. Exibindo apenas resultados da UF: {uf}.")
                         else:
-                            df_combinado.insert(0, 'Selecionar', False)
-                            df_combinado['municipio'] = df_combinado['municipio'].fillna('Não Informado')
-                            df_combinado['data_assinatura'] = pd.to_datetime(df_combinado['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                            st.session_state.df_resultados = df_combinado.head(150)
-                            st.warning(f"Nenhum item exato na UF '{uf}'. Exibindo referência Nacional.")
+                            st.session_state.df_resultados = pd.DataFrame()
+                            st.error(f"Nenhum item exato encontrado na UF '{uf}'. Tente alterar a UF para 'TODAS' ou ajustar os termos da busca.")
                     else:
                         df_final = df_combinado
                         df_final.insert(0, 'Selecionar', False)
                         df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
                         df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                         st.session_state.df_resultados = df_final.head(150)
+                        st.success(f"Consulta concluída! Exibindo cotações de todo o Brasil misturadas.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
                     st.error("Termo encontrado, mas retido pelo Filtro Estrito (ex: procurou 'cimento', achou 'fornecimento').")
             else:
                 st.session_state.df_resultados = pd.DataFrame()
-                st.error("Nenhum registro encontrado.")
+                st.error("Nenhum registro encontrado em nenhum dos bancos.")
 
     if not st.session_state.df_resultados.empty:
         st.markdown("### Preenchimento do Relatório PDF"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
