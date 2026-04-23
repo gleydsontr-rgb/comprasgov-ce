@@ -110,7 +110,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.2 Classic Desktop (Busca Estrita por Estado)</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.3 Classic Desktop (Bug de Duplicação Resolvido)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -704,7 +704,6 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 conn_nac.close()
             except: pass
             
-            # 1. Junta todos os resultados
             df_combinado = pd.concat([df_local, df_nac], ignore_index=True)
 
             if not df_combinado.empty:
@@ -715,32 +714,28 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 
                 if not df_combinado.empty:
                     df_final = pd.DataFrame()
-                    # 2. FILTRAGEM ESTRITA POR ESTADO
                     if uf != "TODAS":
                         df_final = df_combinado[df_combinado['estado'] == uf]
-                        
                         if not df_final.empty:
                             df_final.insert(0, 'Selecionar', False)
                             df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
                             df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                             st.session_state.df_resultados = df_final.head(150)
-                            st.success(f"Consulta concluída. Exibindo apenas resultados da UF: {uf}.")
                         else:
                             st.session_state.df_resultados = pd.DataFrame()
-                            st.error(f"Nenhum item exato encontrado na UF '{uf}'. Tente alterar a UF para 'TODAS' ou ajustar os termos da busca.")
+                            st.error(f"Nenhum item exato encontrado na UF '{uf}'. Tente alterar a UF para 'TODAS' ou ajustar os termos.")
                     else:
                         df_final = df_combinado
                         df_final.insert(0, 'Selecionar', False)
                         df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
                         df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
                         st.session_state.df_resultados = df_final.head(150)
-                        st.success(f"Consulta concluída! Exibindo cotações de todo o Brasil misturadas.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
                     st.error("Termo encontrado, mas retido pelo Filtro Estrito (ex: procurou 'cimento', achou 'fornecimento').")
             else:
                 st.session_state.df_resultados = pd.DataFrame()
-                st.error("Nenhum registro encontrado em nenhum dos bancos.")
+                st.error("Nenhum registro encontrado.")
 
     if not st.session_state.df_resultados.empty:
         st.markdown("### Preenchimento do Relatório PDF"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
@@ -763,7 +758,14 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                 if not selecionados.empty:
                     selecionados['produto_mapa'] = remover_acentos(st.session_state['safe_nome_relatorio']).strip(); selecionados['quantidade'] = float(st.session_state['safe_qtd_relatorio']) 
                     selecionados['id_item'] = [f"CART-{time.time()}-{i}" for i in range(len(selecionados))]
-                    st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True); st.session_state['ultimo_item_selecionado'] = ""; salvar_carrinho_no_banco(); st.success("Incluído!"); time.sleep(1); st.rerun()
+                    st.session_state.carrinho = pd.concat([st.session_state.carrinho, selecionados], ignore_index=True)
+                    
+                    # --- APAGADOR DE MEMÓRIA E REINÍCIO DA TABELA ---
+                    st.session_state.df_resultados['Selecionar'] = False
+                    st.session_state['search_id'] = str(time.time())
+                    # ------------------------------------------------
+                    
+                    st.session_state['ultimo_item_selecionado'] = ""; salvar_carrinho_no_banco(); st.success("Incluído!"); time.sleep(1); st.rerun()
                 else: st.warning("Marque o 'X' na tabela.")
                 
     st.divider(); st.markdown("### Resumo do Mapa de Preços")
