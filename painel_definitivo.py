@@ -45,7 +45,7 @@ st.markdown("""
     /* Remove espaços em branco excessivos */
     .block-container { padding-top: 1rem !important; padding-bottom: 1rem !important; max-width: 98% !important; }
 
-    /* Barra de Título tipo Software Clássico CORRIGIDA (Sem cortes) */
+    /* Barra de Título tipo Software Clássico */
     .portal-header {
         background: linear-gradient(to right, #0A246A, #A6CAF0);
         color: white;
@@ -86,13 +86,17 @@ st.markdown("""
         background-color: #D4D0C8 !important;
     }
 
-    /* Caixas de texto com efeito "afundado" */
-    .stTextInput > div > div > input, .stNumberInput > div > div > input, .stTextArea > div > textarea, .stSelectbox > div > div {
+    /* Caixas de texto com efeito "afundado" CORRIGIDAS para não cortar */
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="select"] > div,
+    textarea {
         border: 2px inset #D4D0C8 !important;
         border-radius: 0px !important;
         background-color: #FFF !important;
+        box-sizing: border-box !important;
+    }
+    input, textarea, div[data-baseweb="select"] {
         font-size: 13px !important;
-        padding: 4px !important;
     }
 
     /* Sidebar cinza clássica */
@@ -110,7 +114,7 @@ st.markdown("""
 </style>
 <div class="portal-header">
     <p class="portal-title">SISTEMA INTEGRADO DE GESTÃO DE COMPRAS E LICITAÇÕES</p>
-    <p class="portal-subtitle">Painel Administrativo | v19.3 Classic Desktop (Bug de Duplicação Resolvido)</p>
+    <p class="portal-subtitle">Painel Administrativo | v19.4 Classic Desktop (Ajuste Visual Anti-Corte)</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -735,7 +739,7 @@ elif aba_selecionada == "2. Painel Central de Cotação (Pesquisa)":
                     st.error("Termo encontrado, mas retido pelo Filtro Estrito (ex: procurou 'cimento', achou 'fornecimento').")
             else:
                 st.session_state.df_resultados = pd.DataFrame()
-                st.error("Nenhum registro encontrado.")
+                st.error("Nenhum registro encontrado em nenhum dos bancos.")
 
     if not st.session_state.df_resultados.empty:
         st.markdown("### Preenchimento do Relatório PDF"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
