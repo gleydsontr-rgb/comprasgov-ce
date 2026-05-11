@@ -709,13 +709,23 @@ elif aba_selecionada == "Painel de Cotação":
         if val_ini > 0: filtros += f" AND valor_unitario >= {val_ini}"
         if val_fim > 0: filtros += f" AND valor_unitario <= {val_fim}"
         filtros += f" AND data_assinatura >= '{dt_ini.strftime('%Y-%m-%d')}' AND data_assinatura <= '{dt_fim.strftime('%Y-%m-%d')}'"
+
+        # FILTRO ANTI-LIXO DIRETO NO SQL (Despreza lotes e serviços)
+        lixos = ['LOTE ', 'CONTRATACAO', 'PRESTACAO', 'AQUISICAO', 'LOCACAO', 'SERVICO']
+        for lixo in lixos:
+            filtros += f" AND descricao_item NOT LIKE '%{lixo}%'"
         
+        # FILTRO DE ESTADO DIRETO NO SQL (Para não faltar espaço na Paraíba)
+        filtro_estado = ""
+        if uf != "TODAS":
+            filtro_estado = f" AND estado = '{uf}'"
+
         ordem_sql = " ORDER BY data_assinatura DESC"
         if ordem == "MENOR PREÇO": ordem_sql = " ORDER BY valor_unitario ASC"
         elif ordem == "MAIOR PREÇO": ordem_sql = " ORDER BY valor_unitario DESC"
         
-        query_local = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
-        query_nacional = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_nacionais WHERE valor_unitario > 0" + filtros + ordem_sql + " LIMIT 1500"
+        query_local = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_compras WHERE valor_unitario > 0" + filtro_estado + filtros + ordem_sql + " LIMIT 1500"
+        query_nacional = "SELECT id_item, descricao_item, unid_medida, valor_unitario, municipio, estado, credor, data_assinatura, link_pncp, origem FROM itens_nacionais WHERE valor_unitario > 0" + filtro_estado + filtros + ordem_sql + " LIMIT 1500"
 
         def aplicar_filtro_estrito(df_alvo, texto):
             if not texto or df_alvo.empty: return df_alvo
@@ -751,29 +761,22 @@ elif aba_selecionada == "Painel de Cotação":
                 df_combinado = aplicar_filtro_estrito(df_combinado, p3)
                 
                 if not df_combinado.empty:
-                    df_final = pd.DataFrame()
+                    df_final = df_combinado
+                    df_final.insert(0, 'Selecionar', False)
+                    df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
+                    df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
+                    st.session_state.df_resultados = df_final.head(150)
+                    
                     if uf != "TODAS":
-                        df_final = df_combinado[df_combinado['estado'] == uf]
-                        if not df_final.empty:
-                            df_final.insert(0, 'Selecionar', False)
-                            df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
-                            df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                            st.session_state.df_resultados = df_final.head(150)
-                        else:
-                            st.session_state.df_resultados = pd.DataFrame()
-                            st.error(f"Nenhuma ocorrência do item na UF '{uf}'. Tente alterar o Filtro Regional para 'TODAS'.")
+                        st.success(f"Consulta concluída! Exibindo apenas cotações do estado: {uf}.")
                     else:
-                        df_final = df_combinado
-                        df_final.insert(0, 'Selecionar', False)
-                        df_final['municipio'] = df_final['municipio'].fillna('Não Informado')
-                        df_final['data_assinatura'] = pd.to_datetime(df_final['data_assinatura'], errors='coerce').dt.strftime('%d/%m/%Y')
-                        st.session_state.df_resultados = df_final.head(150)
+                        st.success("Consulta concluída! Exibindo cotações de todo o Brasil misturadas.")
                 else:
                     st.session_state.df_resultados = pd.DataFrame()
                     st.error("Termo bloqueado pelo Filtro de Qualidade Estrito (ex: buscou 'cimento', mas a base só continha 'fornecimento').")
             else:
                 st.session_state.df_resultados = pd.DataFrame()
-                st.error("Nenhum registro localizado nos arquivos offline.")
+                st.error("Nenhum registro localizado nos arquivos offline para este estado e termo.")
 
     if not st.session_state.df_resultados.empty:
         st.markdown("### Seleção e Composição da Pauta"); c_add1, c_add2, c_add3 = st.columns([3, 1.5, 2])
