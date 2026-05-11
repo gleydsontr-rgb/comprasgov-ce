@@ -8,11 +8,11 @@ import os
 from datetime import datetime, timedelta
 
 # ==========================================
-# CONFIGURAÇÕES DO ROBÔ NACIONAL
+# CONFIGURAÇÕES DO ROBÔ NACIONAL (VERSÃO BLINDADA ANTI-SERVIÇOS)
 # ==========================================
-DIAS_RETROATIVOS = 1 # Pega sempre os dados de 1 dia atrás
-DIAS_MANTER_NO_BANCO = 30 # Apaga dados mais velhos que 30 dias para não estourar os 100MB do GitHub
-ESTADOS = ["AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"] # CE de fora
+DIAS_RETROATIVOS = 1
+DIAS_MANTER_NO_BANCO = 30 
+ESTADOS = ["AC", "AL", "AP", "AM", "BA", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
 
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
 
@@ -42,11 +42,9 @@ def conectar_banco_nacional():
 def limpar_banco_antigo(conn):
     data_limite = (datetime.now() - timedelta(days=DIAS_MANTER_NO_BANCO)).strftime('%Y-%m-%d')
     try:
-        # Tenta deletar convertendo a data_assinatura do formato DD/MM/YYYY para YYYY-MM-DD na query
         conn.execute("DELETE FROM itens_nacionais WHERE substr(data_assinatura, 7, 4) || '-' || substr(data_assinatura, 4, 2) || '-' || substr(data_assinatura, 1, 2) < ?", (data_limite,))
         conn.commit()
-    except Exception as e:
-        print(f"Erro ao limpar banco: {e}")
+    except Exception as e: pass
 
 # ==========================================
 # 🧠 INTELIGÊNCIA E VARREDURA
@@ -58,15 +56,12 @@ def extrair_municipio_do_orgao(nome_orgao):
         r"MUNICIPIO D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"CAMARA MUNICIPAL D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
         r"PREFEITURA D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"FUNDO MUNICIPAL DE SAUDE D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)",
-        r"FUNDO MUNICIPAL DE EDUCA[CÇ][AÃ]O D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)"
+        r"FUNDO MUNICIPAL DE SAUDE D[E|O|A|OS|AS]\s+([A-ZÀ-Ú0-9\s]+)"
     ]
     nome_limpo = remover_acentos(nome_orgao)
     for padrao in padroes:
         match = re.search(remover_acentos(padrao), nome_limpo)
-        if match:
-            mun = match.group(1).strip().split('-')[0].split('/')[0].strip()
-            return mun
+        if match: return match.group(1).strip().split('-')[0].split('/')[0].strip()
     return None
 
 def rodar_arrastao_nacional():
@@ -79,9 +74,18 @@ def rodar_arrastao_nacional():
     str_data = data_alvo.strftime('%Y%m%d')
     data_fmt = data_alvo.strftime('%d/%m/%Y')
     
+    # LISTA NEGRA AGRESSIVA (Para cobrir furos do Governo)
+    palavras_lixo = [
+        'LOTE ', 'CONTRATACAO', 'PRESTACAO', 'LOCACAO', 'SERVICO', 'CONCESSAO', 
+        'TAXA ', 'CONSULTA ', 'TERAPIA', 'PAVIMENTACAO', 'APRESENTACAO', 'MANUTENCAO', 
+        'INSTALACAO', 'REFORMA', 'OBRA ', 'REPARO', 'ASSESSORIA', 'CONSULTORIA', 
+        'EXAME ', 'MENSALIDADE', 'SEGURO ', 'FRETAMENTO', 'HOSPEDAGEM', 'PASSAGEM ', 
+        'TREINAMENTO', 'PALESTRA', 'SHOW', 'BANDA', 'ARTISTICA', 'SONORIZACAO', 'PAGAMENTO'
+    ]
+    
     for estado in ESTADOS:
         print(f"Varrendo UF: {estado}")
-        for pagina in range(1, 4): # Pega as 3 primeiras páginas de cada estado (150 contratos/dia por estado)
+        for pagina in range(1, 4):
             url = f"https://pncp.gov.br/api/consulta/v1/contratos?dataInicial={str_data}&dataFinal={str_data}&uf={estado}&pagina={pagina}&tamanhoPagina=50"
             try:
                 res = requests.get(url, headers=HEADERS, timeout=20, verify=False)
@@ -107,9 +111,18 @@ def rodar_arrastao_nacional():
                             if isinstance(lista_itens, dict): lista_itens = lista_itens.get('data', [])
                             
                             for i, it in enumerate(lista_itens):
+                                # 1. BLOQUEIO NATIVO DO GOVERNO (Pula Serviços 'S' ou '2')
+                                tipo_item = str(it.get('materialOuServico', '')).upper()
+                                if tipo_item in ['S', 'SERVICO', 'SERVIÇO', '2']:
+                                    continue
+                                
                                 desc = remover_acentos(it.get('descricao', f'Item {i}')).upper()
                                 valor = float(it.get('valorUnitarioHomologado') or it.get('valorUnitarioEstimado') or 0.0)
-                                if valor > 0:
+                                
+                                # 2. BLOQUEIO DA LISTA NEGRA (Varre o texto da nota)
+                                is_lixo = any(x in desc for x in palavras_lixo)
+                                
+                                if valor > 0 and not is_lixo:
                                     unid_obj = it.get('unidadeMedida') or {}
                                     unid_medida = remover_acentos(unid_obj.get('nome', 'UN') if isinstance(unid_obj, dict) else str(unid_obj))
                                     id_unico = f"NAC-{cnpj_orgao}-{ano_c}-{seq_c}-{it.get('numeroItem', i)}"
@@ -120,14 +133,13 @@ def rodar_arrastao_nacional():
                                         (id_item, estado, orgao, municipio, data_assinatura, descricao_item, unid_medida, valor_unitario, credor, origem, link_pncp)
                                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                     ''', (id_unico, estado, orgao, municipio.upper(), data_fmt, desc, unid_medida, valor, credor, "TRATOR NACIONAL", link_pncp))
-                                    
                             conn.commit()
-                time.sleep(0.5) # Pausa educada entre páginas
+                time.sleep(0.5)
             except Exception as e:
                 print(f"Erro na UF {estado}: {e}")
                 
     conn.close()
-    print("✅ Arrastão Nacional concluído.")
+    print("✅ Arrastão Nacional concluído e higienizado.")
 
 if __name__ == "__main__":
     import urllib3
